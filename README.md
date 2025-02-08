@@ -1,5 +1,3 @@
-Hello!!!
-
 # Introduction
 
 git-pitch-gen is a CLI tool that integrates with Ollama to automatically generate meaningful commit messages based on your staged changes.
