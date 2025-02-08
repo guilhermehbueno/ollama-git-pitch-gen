@@ -94,7 +94,39 @@ generate_commit_message() {
         fi
     fi
 
-    echo "$result"
+    # Process DeepSeek's output to move <think> content into a comment
+    process_commit_message "$result"
+}
+
+process_commit_message() {
+    local raw_message="$1"
+    local processed_message=""
+    local think_comment=""
+    local inside_think=0
+
+    # Read the message line by line
+    while IFS= read -r line; do
+        if [[ "$line" =~ <think> ]]; then
+            inside_think=1
+            think_comment+="# THINK: ${line//<think>/}\n"  # Start comment, remove <think>
+            continue
+        fi
+
+        if [[ "$line" =~ </think> ]]; then
+            inside_think=0
+            think_comment+="# ${line//<\/think>/}\n"  # Remove </think>, keep as comment
+            continue
+        fi
+
+        if [[ "$inside_think" -eq 1 ]]; then
+            think_comment+="# $line\n"  # Convert every line inside <think> to a comment
+        else
+            processed_message+="$line\n"  # Keep other lines unchanged
+        fi
+    done <<< "$raw_message"
+
+    # Print final commit message with <think> section converted into comments
+    echo -e "$processed_message\n$think_comment"
 }
 
 # ───────────────────────────────────────────────────────────
