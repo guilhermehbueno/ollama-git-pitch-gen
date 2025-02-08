@@ -10,3 +10,8 @@ git-pitch-gen is a CLI tool that integrates with Ollama to automatically generat
 ✔ Git Hook Integration – Automatically runs before committing.
 ✔ Customizable Configuration – Modify AI model, context lines, and commit behavior.
 ✔ Easy Installation & Management – Install, start, stop, and update with a single command.
+
+## **🔹 Installation**  
+```bash
+curl -sSL https://your-url/install.sh | bash
+```
