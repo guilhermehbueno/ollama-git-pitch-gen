@@ -102,7 +102,7 @@ process_commit_message() {
     local raw_message="$1"
     local processed_message=""
     local think_comment=""
-    local inside_think=0
+    local inside_think=0  # Flag to track if we're inside <think> block
 
     # Read the message line by line
     while IFS= read -r line; do
@@ -125,7 +125,7 @@ process_commit_message() {
         fi
     done <<< "$raw_message"
 
-    # Print final commit message with <think> section converted into comments
+    # Return the final commit message with <think> section converted into comments
     echo -e "$processed_message\n$think_comment"
 }
 
