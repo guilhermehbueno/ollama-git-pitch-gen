@@ -213,6 +213,10 @@ pitch_model() {
         updated_lines+=("OLLAMA_MODEL=$selected_model")
     fi
 
+    # Debug: Print final array before writing to the file
+    echo "DEBUG: Final updated_lines content:"
+    printf "%s\n" "${updated_lines[@]}"
+
     # Now log the correct updated lines
     log "$config_file"
     log "${updated_lines[@]}"
