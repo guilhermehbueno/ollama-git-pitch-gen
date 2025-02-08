@@ -77,6 +77,7 @@ generate_commit_message() {
     local diff="$1"
     local result
 
+    echo "📄 Model: $OLLAMA_MODEL"
     is_ollama_running  # Ensure Ollama is running before calling it
 
     local compounded_prompt="$OLLAMA_PROMPT\n$OLLAMA_PROMPT_EXTRA"
