@@ -139,6 +139,103 @@ create_model() {
     fi
 }
 
+uninstall() {
+    rm -rf "$MODEL_DIR"
+    log "Uninstalling Ollama and cleaning up..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew uninstall ollama
+        else
+            echo "Homebrew not found. Please uninstall Ollama manually."
+        fi
+    fi
+}
+
+pitch_model() {
+    # Ensure we're inside a Git repository
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -z "$git_root" ]]; then
+        echo "❌ Not inside a Git repository."
+        exit 1
+    fi
+
+    local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
+    local temp_file="$config_file.tmp"
+
+    # Ensure the config file exists
+    if [[ ! -f "$config_file" ]]; then
+        echo "🔧 Creating configuration file: $config_file"
+        touch "$config_file"
+    fi
+
+    echo "📦 Available Models in Ollama:"
+    
+    # Get a numbered list of models
+    local models=($(ollama list | awk 'NR>1 {print $1}'))
+    
+    if [[ ${#models[@]} -eq 0 ]]; then
+        echo "❌ No models found in Ollama. Please add models first."
+        exit 1
+    fi
+
+    for i in "${!models[@]}"; do
+        echo "$((i+1)). ${models[i]}"
+    done
+
+    # Ask the user to select a model
+    read -p "Enter the number of the model you'd like to use: " choice
+
+    # Validate input
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#models[@]} )); then
+        echo "❌ Invalid choice. Please enter a valid number."
+        exit 1
+    fi
+
+    # Get the chosen model
+    local selected_model="${models[choice-1]}"
+    echo "✅ Selected model: $selected_model"
+
+    # Read the file line by line, replace OLLAMA_MODEL if found
+    local updated_lines=()
+    local found=0
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        echo "DEBUG: Read line -> $line"  # Debug each line read
+        if [[ "$line" =~ ^OLLAMA_MODEL= ]]; then
+            echo "DEBUG: Replacing OLLAMA_MODEL -> $selected_model"
+            updated_lines+=("OLLAMA_MODEL=$selected_model")
+            found=1
+        else
+            updated_lines+=("$line")
+        fi
+    done < "$config_file"
+
+    # If OLLAMA_MODEL was not found, add it at the end
+    if [[ "$found" -eq 0 ]]; then
+        echo "DEBUG: Adding OLLAMA_MODEL=$selected_model at the end"
+        updated_lines+=("OLLAMA_MODEL=$selected_model")
+    fi
+
+    # Debug: Print final array before writing to the file
+    echo "DEBUG: Final updated_lines content:"
+    printf "%s\n" "${updated_lines[@]}"
+
+    # Now log the correct updated lines
+    log "$config_file"
+    log "${updated_lines[@]}"
+
+    # Write back to the properties file
+    printf "%s\n" "${updated_lines[@]}" > "$config_file"
+
+    echo "✅ Updated $config_file with OLLAMA_MODEL=$selected_model"
+}
+
+delete_models() {
+    # Remove Ollama models directory
+    rm -rf ~/.ollama/models
+    log "Removed Ollama models directory."
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
@@ -186,10 +283,16 @@ case "$1" in
         install_ollama
         download_model
         register_symlink
+        create_model ./Modelfile git-assistant
+        create_model ./DeepSeekModelfile my-deepseek
         ;;
     uninstall)
         stop_ollama
-        rm -rf "$MODEL_DIR"
+        uninstall
+        log "Uninstallation complete."
+        ;;
+    delete)
+        delete_models
         log "Uninstallation complete."
         ;;
     start)
@@ -204,8 +307,11 @@ case "$1" in
     apply)
         install_git_hook
         ;;
+    model)
+        pitch_model
+        ;;
     *)
-        echo "Usage: $0 {install|uninstall|start|stop|info|apply}"
+        echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
         exit 1
         ;;
 esac
