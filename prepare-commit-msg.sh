@@ -20,7 +20,7 @@ ALLOW_COMMIT_OVERRIDE=true  # If false, AI-generated message is appended as a co
 OLLAMA_SERVER_PORT=11434  # Default Ollama port
 OLLAMA_CMD="ollama"       # Change this if Ollama is installed elsewhere
 TEMP_FILE="/tmp/ollama_commit_message"  # Ensures no unwanted files in the repo
-CONFIG_FILE=".git/prepare-commit-msg.properties"  # Path to user-defined config
+CONFIG_FILE=".git/hooks/prepare-commit-msg.properties"  # Path to user-defined config
 
 # ───────────────────────────────────────────────────────────
 # 🔹 LOAD USER CONFIGURATION (IF EXISTS)
