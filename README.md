@@ -15,3 +15,8 @@ git-pitch-gen is a CLI tool that integrates with Ollama to automatically generat
 ```bash
 curl -sSL https://your-url/install.sh | bash
 ```
+
+
+
+
+
