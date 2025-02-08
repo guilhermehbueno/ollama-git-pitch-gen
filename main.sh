@@ -200,9 +200,7 @@ pitch_model() {
     local found=0
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        echo "DEBUG: Read line -> $line"  # Debug each line read
         if [[ "$line" =~ ^OLLAMA_MODEL= ]]; then
-            echo "DEBUG: Replacing OLLAMA_MODEL -> $selected_model"
             updated_lines+=("OLLAMA_MODEL=$selected_model")
             found=1
         else
@@ -212,13 +210,8 @@ pitch_model() {
 
     # If OLLAMA_MODEL was not found, add it at the end
     if [[ "$found" -eq 0 ]]; then
-        echo "DEBUG: Adding OLLAMA_MODEL=$selected_model at the end"
         updated_lines+=("OLLAMA_MODEL=$selected_model")
     fi
-
-    # Debug: Print final array before writing to the file
-    echo "DEBUG: Final updated_lines content:"
-    printf "%s\n" "${updated_lines[@]}"
 
     # Now log the correct updated lines
     log "$config_file"
