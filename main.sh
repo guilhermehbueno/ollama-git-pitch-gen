@@ -81,7 +81,7 @@ install_git_hook() {
 }
 
 register_symlink() {
-    local target="$HOME/.local/bin/git-pitch-gen"
+    local target="$HOME/.local/bin/pitch"
     mkdir -p "$HOME/.local/bin"
 
     if [[ -L "$target" ]]; then
