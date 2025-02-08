@@ -106,14 +106,13 @@ process_commit_message() {
 
     # Read the message line by line
     while IFS= read -r line; do
-        echo "Debug: $line" 
-        if [[ "$line" =~ <think> ]]; then
+        if [[ "$line" =~ "<think>" ]]; then
             inside_think=1
             think_comment+="# THINK: ${line//<think>/}\n"  # Start comment, remove <think>
             continue
         fi
 
-        if [[ "$line" =~ </think> ]]; then
+        if [[ "$line" =~ "</think>" ]]; then
             inside_think=0
             think_comment+="# ${line//<\/think>/}\n"  # Remove </think>, keep as comment
             continue
