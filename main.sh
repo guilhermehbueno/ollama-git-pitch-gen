@@ -523,7 +523,7 @@ generate_readme() {
         file_content=$(cat "$file")
         file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
 - A concise summary of its purpose.
-- A list of defined functions, including their names and arguments.
+- A list of defined functions, including their names and arguments, and dependencies.
 - Any key configurations or settings.
 
 File: $file
@@ -561,8 +561,8 @@ Output the README.md content only, without additional explanations.")
         exit 1
     fi
 
-    echo "📄 Writing README.md..."
-    echo "$readme_content" > README.md
+    echo "📄 Displaying generated README.md..."
+    echo "$readme_content"
 
     echo "✅ README.md successfully generated!"
 }
