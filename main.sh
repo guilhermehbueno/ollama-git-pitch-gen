@@ -483,34 +483,24 @@ Format output as:
 }
 
 generate_readme() {
-    local config_file=".git/hooks/prepare-commit-msg.properties"
-    local model_name
+    local model_name="pitch_readme_generator"
     local project_files
     local aggregated_summary=""
     local readme_content
     local ignore_pattern=""
-
-    # Get the AI model from the properties file
-    if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
-    else
-        model_name="pitch_readme_generator"  # Default fallback model
-    fi
+    local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*")
 
     # Check for ignore pattern in arguments
     for arg in "$@"; do
         if [[ "$arg" == --ignore=* ]]; then
-            ignore_pattern="${arg#--ignore=}"  # Extract pattern after --ignore=
+            extra_ignore_pattern="${arg#--ignore=}"  # Extract pattern after --ignore=
+            ignored_paths+=($extra_ignore_pattern)
         fi
     done
 
     echo "📂 Collecting project files..."
-    if [[ -n "$ignore_pattern" ]]; then
-        echo "🚫 Ignoring files matching: $ignore_pattern"
-        project_files=$(find . -maxdepth 1 -type f ! -name "$ignore_pattern" -exec basename {} \;)
-    else
-        project_files=$(find . -maxdepth 1 -type f -exec basename {} \;)
-    fi
+    echo "🚫 Ignoring paths: ${ignored_paths[*]}"
+    project_files=$(find . -maxdepth 10 \( $(printf "! -path %s " "${ignored_paths[@]}") \) -type f -exec basename {} \;)
 
     if [[ -z "$project_files" ]]; then
         echo "❌ No relevant project files found to generate README."
@@ -523,7 +513,7 @@ generate_readme() {
         file_content=$(cat "$file")
         file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
 - A concise summary of its purpose.
-- A list of defined functions, including their names and arguments, and dependencies.
+- A list of defined functions, including their names and arguments.
 - Any key configurations or settings.
 
 File: $file
@@ -561,11 +551,12 @@ Output the README.md content only, without additional explanations.")
         exit 1
     fi
 
-    echo "📄 Displaying generated README.md..."
-    echo "$readme_content"
+    echo "📄 Writing README.md..."
+    echo "$readme_content" > README.md
 
     echo "✅ README.md successfully generated!"
 }
+
 
 
 
