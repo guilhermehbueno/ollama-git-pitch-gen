@@ -415,7 +415,7 @@ case "$1" in
     install)
         install_ollama
         start_ollama
-        download_model
+        # download_model
         register_symlink
         create_model llama3.2
         create_model llama3.1:latest
