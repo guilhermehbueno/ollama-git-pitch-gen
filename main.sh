@@ -10,6 +10,7 @@ MODEL_DIR="$HOME/models"  # Directory to store the model
 MODEL_PATH="git-assistant"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
+INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
@@ -130,14 +131,13 @@ download_model() {
 
 create_model() {
     local model_name="$1"
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local model_file="$script_dir/Modelfile.sample"
+    local model_file="$INSTALL_DIR/Modelfile.sample"
     local temp_model_file="/tmp/pitch_${model_name}.modelfile"
     local prefixed_model_name="pitch_$model_name"
 
     # Ensure the template file exists
     if [[ ! -f "$model_file" ]]; then
-        error "❌ Template file '$model_file' not found."
+        error "❌ Template file '$model_file' not found in $INSTALL_DIR"
         exit 1
     fi
 
