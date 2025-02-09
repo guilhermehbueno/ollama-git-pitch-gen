@@ -285,6 +285,28 @@ remove_pitch_models() {
     echo "✅ All pitch_ models have been removed."
 }
 
+update_pitch() {
+    echo "🔄 Checking for updates..."
+    
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        echo "❌ Installation directory not found. Please reinstall using the install script."
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+    git fetch origin main
+    latest_local_commit=$(git rev-parse HEAD)
+    latest_remote_commit=$(git rev-parse origin/main)
+
+    if [[ "$latest_local_commit" == "$latest_remote_commit" ]]; then
+        echo "✅ You are already up to date!"
+    else
+        echo "⬆️ Updating to the latest version..."
+        git pull origin main
+        echo "🎉 Update complete! Run 'pitch info' to verify the latest version."
+    fi
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
@@ -470,6 +492,9 @@ case "$1" in
         ;;
     model)
         pitch_model
+        ;;
+    update)
+        update_pitch
         ;;
     create_model)
         create_model $2
