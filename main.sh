@@ -338,6 +338,75 @@ info() {
     fi
 }
 
+# Function to generate a PR description in Markdown
+generate_pr_markdown() {
+    local base_branch="$1"
+    local branch_name
+    local diff_content
+    local model_name
+    local config_file=".git/hooks/prepare-commit-msg.properties"
+
+    # Validate that base_branch is provided
+    if [[ -z "$base_branch" ]]; then
+        echo "❌ Error: No base branch provided."
+        echo "Usage: pitch pr <base_branch>"
+        echo "Example: pitch pr main"
+        exit 1
+    fi
+
+    # Get the current Git branch name
+    branch_name=$(git rev-parse --abbrev-ref HEAD)
+
+    # Get the AI model from the properties file
+    if [[ -f "$config_file" ]]; then
+        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+    else
+        model_name="pitch_default"  # Default fallback model
+    fi
+
+    echo "🤖 Using AI Model: $model_name"
+
+    # Get the Git diff between base branch and the current branch
+    echo "🔍 Comparing $base_branch to $branch_name..."
+    diff_content=$(git diff $base_branch..$branch_name --unified=3 --no-color | tail -n 100)
+
+    if [[ -z "$diff_content" ]]; then
+        echo "❌ No differences found between $base_branch and $branch_name."
+        exit 1
+    fi
+
+    # Send the diff to Ollama for PR generation
+    echo "📨 Sending Git diff to Ollama for PR title and summary..."
+    ollama run "$model_name" "Generate a concise Pull Request title and summary. Ensure the output follows strict Markdown formatting:
+
+Generate a concise Pull Request title and summary in Markdown format for the following Git diff:
+
+$diff_content
+
+Format output as:
+# <PR Title>
+
+## 📌 Summary
+<PR Summary>
+
+## 🔄 Changes Made
+- List modified files
+
+## 🛠 How to Test
+1. Steps to validate the changes
+
+## ✅ Checklist
+- [ ] Code follows project guidelines
+- [ ] Tests have been added/updated
+- [ ] Documentation is updated if needed
+
+## 📜 Related Issues / Tickets
+- Fixes #...
+
+## 📝 Additional Notes
+- Any extra information reviewers should know" 
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SCRIPT EXECUTION LOGIC
 # ───────────────────────────────────────────────────────────
@@ -376,6 +445,12 @@ case "$1" in
         ;;
     model)
         pitch_model
+        ;;
+    create_model)
+        create_model $2
+        ;;
+    pr)
+        generate_pr_markdown $2
         ;;
     *)
         echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
