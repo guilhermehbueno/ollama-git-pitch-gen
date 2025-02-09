@@ -129,14 +129,39 @@ download_model() {
 }
 
 create_model() {
-    local model_file=$1
-    local model_name=$2
-    if ollama list | grep -q "$model_name"; then
-        log "Model '$model_name' already exists."
-    else
-        ollama create "$model_name" -f "$model_file" || error "Failed to create model '$model_name'."
-        log "Model '$model_name' created successfully."
+    local model_name="$1"
+    local model_file="./Modelfile.sample"
+    local temp_model_file="/tmp/pitch_${model_name}.modelfile"
+    local prefixed_model_name="pitch_$model_name"
+
+    # Ensure the template file exists
+    if [[ ! -f "$model_file" ]]; then
+        error "❌ Template file '$model_file' not found."
     fi
+
+    # Check if the model already exists
+    if ollama list | grep -q "$prefixed_model_name"; then
+        log "✅ Model '$prefixed_model_name' already exists."
+        return
+    fi
+
+    log "📦 Creating model '$prefixed_model_name' from template..."
+
+    # Replace placeholder in Modelfile.sample and store in a temporary file
+    sed "s/<MODEL_NAME>/$model_name/g" "$model_file" > "$temp_model_file"
+
+    # Create the model using the modified template
+    ollama create "$prefixed_model_name" -f "$temp_model_file"
+
+    # Verify if the model was created successfully
+    if ollama list | grep -q "$prefixed_model_name"; then
+        log "✅ Model '$prefixed_model_name' created successfully."
+    else
+        error "❌ Failed to create model '$prefixed_model_name'."
+    fi
+
+    # Cleanup: Remove temporary file
+    rm -f "$temp_model_file"
 }
 
 uninstall() {
@@ -171,7 +196,7 @@ pitch_model() {
     echo "📦 Available Models in Ollama:"
     
     # Get a numbered list of models
-    local models=($(ollama list | awk 'NR>1 {print $1}'))
+    local models=($(ollama list | grep pitch | awk '{print $1}'))
     
     if [[ ${#models[@]} -eq 0 ]]; then
         echo "❌ No models found in Ollama. Please add models first."
@@ -280,8 +305,9 @@ case "$1" in
         install_ollama
         download_model
         register_symlink
-        create_model ./Modelfile git-assistant
-        create_model ./DeepSeekModelfile my-deepseek
+        create_model llama3.2
+        create_model llama3.1:latest
+        create_model deepseek-coder:latest
         ;;
     uninstall)
         stop_ollama
