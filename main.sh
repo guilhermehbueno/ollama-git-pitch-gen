@@ -344,6 +344,23 @@ info() {
     else
         echo "❌ Symlink for pitch is NOT set up."
     fi
+
+    # Check latest commit hash and recommend updates
+    install_dir="$HOME/.ollama-git-pitch-gen"
+    if [[ -d "$install_dir" ]]; then
+        cd "$install_dir"
+        latest_local_commit=$(git rev-parse HEAD)
+        latest_remote_commit=$(git ls-remote origin -h refs/heads/main | awk '{print $1}')
+
+        echo "🔍 Latest installed commit: $latest_local_commit"
+        if [[ "$latest_local_commit" != "$latest_remote_commit" ]]; then
+            echo "⚠️ A new update is available. Run 'pitch update' to get the latest version."
+        else
+            echo "✅ Your installation is up to date."
+        fi
+    else
+        echo "❌ Installation directory not found: $install_dir"
+    fi
 }
 
 # Function to generate a PR description in Markdown
