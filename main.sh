@@ -482,6 +482,41 @@ Format output as:
     fi
 }
 
+generate_readme() {
+    local model_name="pitch_readme_generator"  # Use a specific model for better structured docs
+    local project_files
+    local readme_content
+
+    echo "📂 Collecting project information..."
+    project_files=$(find . -maxdepth 1 -type f \( -name "*.sh" -o -name "*.sample" -o -name "*.properties" \) -exec basename {} \;)
+
+    if [[ -z "$project_files" ]]; then
+        echo "❌ No relevant project files found to generate README."
+        exit 1
+    fi
+
+    echo "📨 Sending project structure to Ollama for README generation..."
+    readme_content=$(ollama run "$model_name" "Generate a detailed README.md file based on the following project structure and scripts:
+
+Project Files:
+$project_files
+
+Guidelines:
+- Include an Introduction explaining what the project does.
+Output the README.md content only, without additional explanations.")
+
+    if [[ -z "$readme_content" ]]; then
+        echo "❌ Failed to generate README."
+        exit 1
+    fi
+
+    echo "📄 Writing README.md..."
+    echo "$readme_content"
+
+    echo "✅ README.md successfully generated!"
+}
+
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SCRIPT EXECUTION LOGIC
 # ───────────────────────────────────────────────────────────
@@ -529,6 +564,9 @@ case "$1" in
         ;;
     pr)
         generate_pr_markdown $2
+        ;;
+    readme)
+        generate_readme
         ;;
     *)
         echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
