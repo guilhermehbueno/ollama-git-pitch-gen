@@ -336,6 +336,14 @@ info() {
     else
         echo "❌ Not inside a Git repository."
     fi
+
+    # Check if the symlink exists for the pitch executable
+    symlink_target="$HOME/.local/bin/pitch"
+    if [[ -L "$symlink_target" ]]; then
+        echo "🔗 Symlink for pitch is set up at: $(readlink -f "$symlink_target")"
+    else
+        echo "❌ Symlink for pitch is NOT set up."
+    fi
 }
 
 # Function to generate a PR description in Markdown
