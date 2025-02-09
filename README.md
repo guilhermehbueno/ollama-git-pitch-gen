@@ -43,6 +43,30 @@ cd git-pitch-gen
 
 ---
 
+## **📌 Pitch CLI Usage**
+
+The `pitch` command-line tool provides various functions for managing AI-powered commit messages and automating Git workflows.
+
+---
+
+### **🚀 Available Commands**
+
+| **Command**         | **Description** |
+|--------------------|----------------|
+| `pitch install`    | Installs Ollama, starts the Ollama server, registers symlink, and creates default models. |
+| `pitch uninstall`  | Removes `pitch` models, stops Ollama, and performs full uninstallation. |
+| `pitch delete`     | Deletes only the models while keeping the installation intact. |
+| `pitch start`      | Starts the Ollama server. |
+| `pitch stop`       | Stops the Ollama server. |
+| `pitch info`       | Displays system information, including installed models, symlinks, and updates. |
+| `pitch apply`      | Installs the Git hook to automate commit message generation. |
+| `pitch model`      | Allows the user to switch AI models used for commit messages. |
+| `pitch update`     | Updates `pitch` to the latest version from the repository. |
+| `pitch create_model <model-name>` | Creates a new AI model with the given name. |
+| `pitch pr <base_branch>` | Generates a **Pull Request title and description** using AI, comparing the current branch to `<base_branch>`. |
+
+---
+
 ## **📌 Usage**
 
 ### **Generating AI-Powered Commit Messages**
