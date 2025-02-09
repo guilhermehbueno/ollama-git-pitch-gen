@@ -500,7 +500,7 @@ generate_readme() {
 
     echo "📂 Collecting project files..."
     echo "🚫 Ignoring paths: ${ignored_paths[*]}"
-    project_files=$(find . -maxdepth 10 \( $(printf "! -path %s " "${ignored_paths[@]}") \) -type f -exec basename {} \;)
+    project_files=$(find . -maxdepth 10 \( $(printf "! -path %s " "${ignored_paths[@]}") \) -type f -exec realpath {} \;)
 
     if [[ -z "$project_files" ]]; then
         echo "❌ No relevant project files found to generate README."
