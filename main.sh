@@ -377,6 +377,9 @@ case "$1" in
     model)
         pitch_model
         ;;
+    create_model)
+        create_model $2
+        ;;
     *)
         echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
         exit 1
