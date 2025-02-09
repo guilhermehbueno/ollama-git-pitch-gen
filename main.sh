@@ -483,26 +483,69 @@ Format output as:
 }
 
 generate_readme() {
-    local model_name="pitch_readme_generator"  # Use a specific model for better structured docs
+    local model_name="pitch_readme_generator"
     local project_files
+    local aggregated_summary=""
     local readme_content
+    local ignore_pattern=""
 
-    echo "📂 Collecting project information..."
-    project_files=$(find . -maxdepth 1 -type f \( -name "*.sh" -o -name "*.sample" -o -name "*.properties" \) -exec basename {} \;)
+    # Check for ignore pattern in arguments
+    for arg in "$@"; do
+        if [[ "$arg" == --ignore=* ]]; then
+            ignore_pattern="${arg#--ignore=}"  # Extract pattern after --ignore=
+        fi
+    done
+
+    echo "📂 Collecting project files..."
+    if [[ -n "$ignore_pattern" ]]; then
+        echo "🚫 Ignoring files matching: $ignore_pattern"
+        project_files=$(find . -maxdepth 1 -type f ! -name "$ignore_pattern" -exec basename {} \;)
+    else
+        project_files=$(find . -maxdepth 1 -type f -exec basename {} \;)
+    fi
 
     if [[ -z "$project_files" ]]; then
         echo "❌ No relevant project files found to generate README."
         exit 1
     fi
 
-    echo "📨 Sending project structure to Ollama for README generation..."
-    readme_content=$(ollama run "$model_name" "Generate a detailed README.md file based on the following project structure and scripts:
+    echo "📄 Summarizing project files..."
+    for file in $project_files; do
+        echo "🔍 Processing $file..."
+        file_content=$(cat "$file")
+        file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
+- A concise summary of its purpose.
+- A list of defined functions, including their names and arguments.
+- Any key configurations or settings.
 
-Project Files:
-$project_files
+File: $file
+Content:
+$file_content
+
+Output format:
+SUMMARY: <summary of the file>
+FUNCTIONS:
+- function_name1(arg1, arg2)
+- function_name2(arg1, arg2)
+
+CONFIGURATIONS:
+- Key1: Value1
+- Key2: Value2")
+
+        aggregated_summary+="$file_summary\n\n"
+    done
+
+    echo "📨 Sending aggregated summaries to Ollama for README generation..."
+    readme_content=$(ollama run "$model_name" "Generate a comprehensive README.md file based on the following project summaries:
+
+$aggregated_summary
 
 Guidelines:
 - Include an Introduction explaining what the project does.
+- Describe all detected functions and configurations.
+- Provide installation and usage instructions.
+- Format everything strictly in Markdown.
+
 Output the README.md content only, without additional explanations.")
 
     if [[ -z "$readme_content" ]]; then
@@ -511,10 +554,11 @@ Output the README.md content only, without additional explanations.")
     fi
 
     echo "📄 Writing README.md..."
-    echo "$readme_content"
+    echo "$readme_content" > README.md
 
     echo "✅ README.md successfully generated!"
 }
+
 
 
 # ───────────────────────────────────────────────────────────
