@@ -30,7 +30,7 @@ Ensure you have:
 ### **Install via Script**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/guilhermehbueno/ollama-git-pitch-gen/refs/heads/main/main.sh | bash
+curl -sSL https://raw.githubusercontent.com/guilhermehbueno/ollama-git-pitch-gen/main/install.sh | bash
 ```
 
 ### **Manual Installation**
