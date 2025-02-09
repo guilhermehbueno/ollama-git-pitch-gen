@@ -130,13 +130,15 @@ download_model() {
 
 create_model() {
     local model_name="$1"
-    local model_file="./Modelfile.sample"
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local model_file="$script_dir/Modelfile.sample"
     local temp_model_file="/tmp/pitch_${model_name}.modelfile"
     local prefixed_model_name="pitch_$model_name"
 
     # Ensure the template file exists
     if [[ ! -f "$model_file" ]]; then
         error "❌ Template file '$model_file' not found."
+        exit 1
     fi
 
     # Check if the model already exists
