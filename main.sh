@@ -496,7 +496,6 @@ generate_readme() {
     else
         model_name="pitch_readme_generator"  # Default fallback model
     fi
-
     # Check for ignore pattern in arguments
     for arg in "$@"; do
         if [[ "$arg" == --ignore=* ]]; then
@@ -514,7 +513,7 @@ generate_readme() {
         exit 1
     fi
 
-    echo "📄 Summarizing project files..."
+    echo "📄 Summarizing project files ($model_name)..."
     for file in $project_files; do
         echo "🔍 Processing $file..."
         file_content=$(cat "$file")
