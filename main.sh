@@ -346,6 +346,14 @@ generate_pr_markdown() {
     local model_name
     local config_file=".git/hooks/prepare-commit-msg.properties"
 
+    # Validate that base_branch is provided
+    if [[ -z "$base_branch" ]]; then
+        echo "❌ Error: No base branch provided."
+        echo "Usage: pitch pr <base_branch>"
+        echo "Example: pitch pr main"
+        exit 1
+    fi
+
     # Get the current Git branch name
     branch_name=$(git rev-parse --abbrev-ref HEAD)
 
