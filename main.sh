@@ -489,6 +489,7 @@ generate_readme() {
     local readme_content
     local ignore_pattern=""
     local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
+    local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
 
     # Get the AI model from the properties file
     if [[ -f "$config_file" ]]; then
