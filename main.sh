@@ -338,6 +338,77 @@ info() {
     fi
 }
 
+# Function to generate a PR description in Markdown
+generate_pr_markdown() {
+    local base_branch="$1"
+    local branch_name
+    local pr_title
+    local pr_summary
+    local diff_content
+    local model_name
+    local config_file=".git/hooks/prepare-commit-msg.properties"
+
+    # Get the current Git branch name
+    branch_name=$(git rev-parse --abbrev-ref HEAD)
+
+    # Ask the user for a PR title
+    read -p "Enter the Pull Request title: " pr_title
+
+    # Get the AI model from the properties file
+    if [[ -f "$config_file" ]]; then
+        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+    else
+        model_name="pitch_default"  # Default fallback model
+    fi
+
+    echo "🤖 Using AI Model: $model_name"
+
+    # Get the Git diff between base branch and the current branch
+    diff_content=$(git diff $base_branch..$branch_name --unified=3 --no-color | tail -n 100)
+
+    if [[ -z "$diff_content" ]]; then
+        echo "❌ No differences found between $base_branch and $branch_name."
+        exit 1
+    fi
+
+    # Send the diff to Ollama for summarization
+    echo "📨 Sending Git diff to Ollama for PR summary..."
+    pr_summary=$(ollama run "$model_name" "Generate a concise Pull Request summary for the following Git diff:\n\n$diff_content")
+
+    if [[ -z "$pr_summary" ]]; then
+        echo "❌ Ollama failed to generate a summary. Using a placeholder."
+        pr_summary="TODO: Add PR summary."
+    fi
+
+    # Build the PR body
+    cat <<EOF
+# $pr_title
+
+## 📌 Summary
+$pr_summary
+
+## 🔄 Changes Made
+- $(git diff --name-only $base_branch..$branch_name | sed 's/^/- /')
+
+## 🛠 How to Test
+<!-- Steps to test this PR -->
+1. ...
+
+## ✅ Checklist
+- [ ] Code follows the project's style guidelines
+- [ ] Tests have been added or updated
+- [ ] Documentation has been updated (if needed)
+
+## 📜 Related Issues / Tickets
+<!-- Link related tickets or issues -->
+- Fixes #...
+
+## 📝 Additional Notes
+<!-- Any other information reviewers should know -->
+- ...
+EOF
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SCRIPT EXECUTION LOGIC
 # ───────────────────────────────────────────────────────────
@@ -379,6 +450,9 @@ case "$1" in
         ;;
     create_model)
         create_model $2
+        ;;
+    pr)
+        generate_pr_markdown $2
         ;;
     *)
         echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
