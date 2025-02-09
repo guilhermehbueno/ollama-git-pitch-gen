@@ -78,7 +78,7 @@ install_git_hook() {
 
     log "Git hook installed successfully."
     log "- $hook_file"
-    log "- $hook_properties"
+    log "- $hook_file.properties"
 }
 
 register_symlink() {
@@ -490,6 +490,8 @@ generate_readme() {
     local ignore_pattern=""
     local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
     local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
+
+    echo "config_file: $config_file"
 
     # Get the AI model from the properties file
     if [[ -f "$config_file" ]]; then
