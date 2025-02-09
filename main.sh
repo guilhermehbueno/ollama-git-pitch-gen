@@ -488,7 +488,7 @@ generate_readme() {
     local aggregated_summary=""
     local readme_content
     local ignore_pattern=""
-    local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*")
+    local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
 
     # Check for ignore pattern in arguments
     for arg in "$@"; do
