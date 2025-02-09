@@ -291,7 +291,7 @@ remove_pitch_models() {
 
 update_pitch() {
     echo "🔄 Checking for updates..."
-    
+    INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
     if [[ ! -d "$INSTALL_DIR" ]]; then
         echo "❌ Installation directory not found. Please reinstall using the install script."
         exit 1

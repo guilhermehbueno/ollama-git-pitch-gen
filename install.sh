@@ -21,11 +21,6 @@ install_dependencies() {
         exit 1
     fi
     
-    if ! command_exists ollama; then
-        echo "❌ Ollama is not installed. Please install it from https://ollama.ai and try again."
-        exit 1
-    fi
-    
     if ! command_exists gh; then
         echo "⚠️ GitHub CLI (gh) is not installed. PR automation will be disabled."
     fi
@@ -61,5 +56,6 @@ setup_executable() {
 install_dependencies
 setup_repository
 setup_executable
+$INSTALL_DIR/main.sh install
 
 echo "🎉 Installation complete! Use 'pitch' commands to get started."
