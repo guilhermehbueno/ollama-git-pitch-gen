@@ -57,16 +57,9 @@ setup_executable() {
     fi
 }
 
-# Function to set up Git hooks
-setup_git_hooks() {
-    echo "🛠 Setting up Git hooks..."
-    "$INSTALL_DIR/main.sh" apply
-}
-
 # Main installation process
 install_dependencies
 setup_repository
 setup_executable
-setup_git_hooks
 
 echo "🎉 Installation complete! Use 'pitch' commands to get started."
