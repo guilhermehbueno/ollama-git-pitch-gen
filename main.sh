@@ -489,8 +489,14 @@ generate_readme() {
     local readme_content
     local ignore_pattern=""
     local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
-    local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
+    local config_file
+    
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -z "$git_root" ]]; then
+        error "Not inside a Git repository."
+    fi
 
+    config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
     echo "config_file: $config_file"
 
     # Get the AI model from the properties file
