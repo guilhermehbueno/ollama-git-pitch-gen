@@ -458,6 +458,20 @@ Format output as:
 
 ## 📝 Additional Notes
 - Any extra information reviewers should know" 
+
+
+    # Print the PR output
+    echo "$pr_output"
+
+    # Check if GitHub CLI is installed and --text-only flag is NOT provided
+    if command -v gh >/dev/null 2>&1 && [[ "$text_only_flag" != "--text-only" ]]; then
+        echo "🔗 Creating GitHub Pull Request..."
+        pr_title=$(echo "$pr_output" | awk 'NR==1 {print}')
+        pr_body=$(echo "$pr_output" | tail -n +2)
+        gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
+    else
+        echo "ℹ️ Skipping GitHub PR creation (either --text-only flag is set or gh CLI is missing)."
+    fi
 }
 
 # ───────────────────────────────────────────────────────────
