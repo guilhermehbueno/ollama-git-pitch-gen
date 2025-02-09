@@ -258,6 +258,33 @@ delete_models() {
     log "Removed Ollama models directory."
 }
 
+remove_pitch_models() {
+    echo "📦 Fetching all pitch_ models from Ollama..."
+    
+    # Get a list of models with the "pitch_" prefix
+    local models=($(ollama list | grep pitch | awk '{print $1}'))
+
+    # Check if there are any models to remove
+    if [[ ${#models[@]} -eq 0 ]]; then
+        echo "❌ No pitch_ models found in Ollama."
+        return
+    fi
+
+    # Confirm before deleting
+    echo "🗑 The following models will be removed:"
+    for model in "${models[@]}"; do
+        echo "   - $model"
+    done
+
+    # Loop through models and remove each one
+    for model in "${models[@]}"; do
+        echo "🗑 Removing model: $model"
+        ollama rm "$model"
+    done
+
+    echo "✅ All pitch_ models have been removed."
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
@@ -286,11 +313,26 @@ info() {
     git_root=$(git rev-parse --show-toplevel 2>/dev/null)
     if [[ -n "$git_root" ]]; then
         hook_path="$git_root/.git/hooks/prepare-commit-msg"
+        config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
+
         if [[ -f "$hook_path" ]]; then
             echo "✅ Git hook installed at $hook_path"
         else
             echo "❌ Git hook NOT installed."
         fi
+
+        # Read the model name from the .properties file
+        if [[ -f "$config_file" ]]; then
+            model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+            if [[ -n "$model_name" ]]; then
+                echo "🤖 Current AI Model: $model_name"
+            else
+                echo "❌ No model set in $config_file."
+            fi
+        else
+            echo "❌ Configuration file not found: $config_file"
+        fi
+
     else
         echo "❌ Not inside a Git repository."
     fi
@@ -303,6 +345,7 @@ info() {
 case "$1" in
     install)
         install_ollama
+        start_ollama
         download_model
         register_symlink
         create_model llama3.2
@@ -310,6 +353,7 @@ case "$1" in
         create_model deepseek-coder:latest
         ;;
     uninstall)
+        remove_pitch_models
         stop_ollama
         uninstall
         log "Uninstallation complete."
