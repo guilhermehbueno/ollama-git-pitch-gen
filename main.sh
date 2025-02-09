@@ -483,12 +483,19 @@ Format output as:
 }
 
 generate_readme() {
-    local model_name="pitch_readme_generator"
+    local model_name
     local project_files
     local aggregated_summary=""
     local readme_content
     local ignore_pattern=""
     local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
+
+    # Get the AI model from the properties file
+    if [[ -f "$config_file" ]]; then
+        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+    else
+        model_name="pitch_readme_generator"  # Default fallback model
+    fi
 
     # Check for ignore pattern in arguments
     for arg in "$@"; do
