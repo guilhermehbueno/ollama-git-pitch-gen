@@ -394,6 +394,7 @@ info() {
 # Function to generate a PR description in Markdown
 generate_pr_markdown() {
     local base_branch="$1"
+    local text_only_flag="$2"
     local branch_name
     local diff_content
     local model_name
@@ -402,7 +403,7 @@ generate_pr_markdown() {
     # Validate that base_branch is provided
     if [[ -z "$base_branch" ]]; then
         echo "❌ Error: No base branch provided."
-        echo "Usage: pitch pr <base_branch>"
+        echo "Usage: pitch pr <base_branch> [--text-only]"
         echo "Example: pitch pr main"
         exit 1
     fi
@@ -428,17 +429,26 @@ generate_pr_markdown() {
         exit 1
     fi
 
-    # Send the diff to Ollama for PR generation
-    echo "📨 Sending Git diff to Ollama for PR title and summary..."
-    ollama run "$model_name" "Generate a concise Pull Request title and summary. Ensure the output follows strict Markdown formatting:
-
-Generate a concise Pull Request title and summary in Markdown format for the following Git diff:
+    # Get PR title from Ollama
+    echo "📨 Generating PR title..."
+    pr_title=$(ollama run "$model_name" "Generate a concise Pull Request title based on the following Git diff:
 
 $diff_content
 
 Format output as:
-# <PR Title>
+<PR Title>")
 
+    if [[ -z "$pr_title" ]]; then
+        pr_title="Auto-generated PR Title"
+    fi
+
+    # Get PR description from Ollama
+    echo "📨 Generating PR description..."
+    pr_body=$(ollama run "$model_name" "Generate a concise Pull Request description in Markdown format for the following Git diff:
+
+$diff_content
+
+Format output as:
 ## 📌 Summary
 <PR Summary>
 
@@ -457,17 +467,15 @@ Format output as:
 - Fixes #...
 
 ## 📝 Additional Notes
-- Any extra information reviewers should know" 
-
+- Any extra information reviewers should know")
 
     # Print the PR output
-    echo "$pr_output"
+    echo "# $pr_title"
+    echo "$pr_body"
 
     # Check if GitHub CLI is installed and --text-only flag is NOT provided
     if command -v gh >/dev/null 2>&1 && [[ "$text_only_flag" != "--text-only" ]]; then
         echo "🔗 Creating GitHub Pull Request..."
-        pr_title=$(echo "$pr_output" | awk 'NR==1 {print}')
-        pr_body=$(echo "$pr_output" | tail -n +2)
         gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
     else
         echo "ℹ️ Skipping GitHub PR creation (either --text-only flag is set or gh CLI is missing)."
