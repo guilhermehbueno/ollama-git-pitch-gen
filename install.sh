@@ -56,6 +56,8 @@ setup_executable() {
 install_dependencies
 setup_repository
 setup_executable
-$INSTALL_DIR/main.sh install
+cd $INSTALL_DIR
+./main.sh install
+cd -
 
 echo "🎉 Installation complete! Use 'pitch' commands to get started."
