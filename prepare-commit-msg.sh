@@ -58,7 +58,7 @@ get_git_diff() {
 
     if [[ $(echo "$diff" | wc -l) -gt $MAX_DIFF_LINES ]]; then
         echo "⚠️  Diff too long. Truncating to last 50 lines."
-        diff=$(echo "$diff" | tail -n 50)
+        diff=$(echo "$diff" | tail -n $MAX_DIFF_LINES)
     fi
 
     echo "$diff"
