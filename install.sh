@@ -2,17 +2,24 @@
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
-# Define variables
+##############################################
+# Configuration
+##############################################
 REPO_URL="https://github.com/guilhermehbueno/ollama-git-pitch-gen.git"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
 EXECUTABLE_NAME="pitch"
+BIN_DIR="$HOME/.local/bin"
 
-# Function to check if a command exists
+##############################################
+# Helper Functions
+##############################################
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to install dependencies
+##############################################
+# Dependency Installation
+##############################################
 install_dependencies() {
     echo "🔧 Checking dependencies..."
     
@@ -26,38 +33,47 @@ install_dependencies() {
     fi
 }
 
-# Function to clone or update the repository
+##############################################
+# Repository Setup
+##############################################
 setup_repository() {
     echo "📥 Checking installation directory..."
     
-    if [[ ! -d "$INSTALL_DIR" ]]; then
-        echo "🚀 Cloning git-pitch-gen repository into $INSTALL_DIR..."
-        git clone --depth=1 "$REPO_URL" "$INSTALL_DIR" || { echo "❌ Failed to clone repository."; exit 1; }
-    else
-        echo "✅ Repository already exists at $INSTALL_DIR. Updating..."
-        cd "$INSTALL_DIR" && git pull origin main
+    if [[ -d "$INSTALL_DIR" ]]; then
+        echo "🔄 Removing existing installation..."
+        rm -rf "$INSTALL_DIR"
     fi
+
+    echo "🚀 Cloning git-pitch-gen repository into $INSTALL_DIR..."
+    git clone --depth=1 "$REPO_URL" "$INSTALL_DIR" || { echo "❌ Failed to clone repository."; exit 1; }
 }
 
-# Function to set up executable
+##############################################
+# Executable Setup
+##############################################
 setup_executable() {
     echo "🔗 Setting up executable..."
-    ln -sf "$INSTALL_DIR/main.sh" "$HOME/.local/bin/$EXECUTABLE_NAME"
-    chmod +x "$HOME/.local/bin/$EXECUTABLE_NAME"
+    mkdir -p "$BIN_DIR"
+    ln -sf "$INSTALL_DIR/main.sh" "$BIN_DIR/$EXECUTABLE_NAME"
+    chmod +x "$BIN_DIR/$EXECUTABLE_NAME"
     
-    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-        echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
-        echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$HOME/.zshrc"
-        echo "✅ Added $HOME/.local/bin to PATH. Restart your shell or run 'source ~/.bashrc' or 'source ~/.zshrc'"
+    if ! echo "$PATH" | grep -q "$BIN_DIR"; then
+        echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
+        echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.zshrc"
+        echo "✅ Added $BIN_DIR to PATH. Restart your shell or run 'source ~/.bashrc' or 'source ~/.zshrc'"
+    else
+        echo "✅ $BIN_DIR is already in PATH."
     fi
 }
 
-# Main installation process
+##############################################
+# Main Installation Process
+##############################################
 install_dependencies
 setup_repository
 setup_executable
-cd $INSTALL_DIR
-./main.sh install
-cd -
+
+# Run main.sh install
+"$INSTALL_DIR/main.sh" install
 
 echo "🎉 Installation complete! Use 'pitch' commands to get started."
