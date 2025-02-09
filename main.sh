@@ -359,6 +359,8 @@ generate_pr_markdown() {
     echo "🤖 Using AI Model: $model_name"
 
     # Get the Git diff between base branch and the current branch
+    echo "base_branch: $base_branch"
+    echo "branch_name: $branch_name"
     diff_content=$(git diff $base_branch..$branch_name --unified=3 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
