@@ -7,7 +7,7 @@
 MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
 HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
 MODEL_DIR="$HOME/models"  # Directory to store the model
-MODEL_PATH="git-assistant"  # Model alias for Ollama
+MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
@@ -318,7 +318,7 @@ commit() {
     install_gum
 
     # Get the current staged changes
-    diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
+    local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
         echo "❌ No staged changes found. Please stage files before committing."
@@ -326,12 +326,17 @@ commit() {
     fi
 
     echo "📨 Generating AI commit message suggestion..."
-    suggested_message=$(ollama run "$MODEL_PATH" "Generate a concise and meaningful Git commit message for the following changes:
+        # Load commit prompt from the .properties file in the hooks directory
+    local config_file=".git/hooks/prepare-commit-msg.properties"
+    local commit_prompt="Generate a concise and meaningful Git commit message for the following changes:"
+    local local_model=$MODEL_PATH
+    if [[ -f "$config_file" ]]; then
+        commit_prompt=$(grep "^OLLAMA_PROMPT=" "$config_file" | cut -d '=' -f2-)
+        local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+    fi
 
-$diff_content
-
-Format output as:
-<commit message>")
+    echo "📨 Generating AI commit message suggestion..."
+    local suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a concise and meaningful Git commit message for the following changes: $diff_content Format output as: <commit message>")
 
     if [[ -z "$suggested_message" ]]; then
         echo "❌ Failed to generate commit message. Please type your own."
@@ -339,7 +344,7 @@ Format output as:
     fi
 
     # Use Gum to prompt the user for their commit message with AI suggestion
-    commit_message=$(echo "$suggested_message" | gum write --placeholder "Enter your commit message")
+    local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message")
 
     # Ensure commit message is not empty
     if [[ -z "$commit_message" ]]; then
@@ -347,11 +352,12 @@ Format output as:
         exit 1
     fi
 
-    // Will the hook execute even with the -m message?
     # Commit with the final message
     git commit -m "$commit_message"
     echo "✅ Commit successful!"
 }
+
+
 
 
 # ───────────────────────────────────────────────────────────
