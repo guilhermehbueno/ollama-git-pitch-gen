@@ -347,6 +347,7 @@ Format output as:
         exit 1
     fi
 
+    // Will the hook execute even with the -m message?
     # Commit with the final message
     git commit -m "$commit_message"
     echo "✅ Commit successful!"
