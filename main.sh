@@ -313,6 +313,46 @@ update_pitch() {
     fi
 }
 
+commit() {
+    # Ensure Gum is installed
+    install_gum
+
+    # Get the current staged changes
+    diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
+
+    if [[ -z "$diff_content" ]]; then
+        echo "❌ No staged changes found. Please stage files before committing."
+        exit 1
+    fi
+
+    echo "📨 Generating AI commit message suggestion..."
+    suggested_message=$(ollama run "$MODEL_PATH" "Generate a concise and meaningful Git commit message for the following changes:
+
+$diff_content
+
+Format output as:
+<commit message>")
+
+    if [[ -z "$suggested_message" ]]; then
+        echo "❌ Failed to generate commit message. Please type your own."
+        suggested_message=""
+    fi
+
+    # Use Gum to prompt the user for their commit message with AI suggestion
+    commit_message=$(echo "$suggested_message" | gum write --placeholder "Enter your commit message")
+
+    # Ensure commit message is not empty
+    if [[ -z "$commit_message" ]]; then
+        echo "❌ Commit message cannot be empty."
+        exit 1
+    fi
+
+    # Commit with the final message
+    git commit -m "$commit_message"
+    echo "✅ Commit successful!"
+}
+
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
@@ -610,6 +650,9 @@ case "$1" in
         ;;
     apply)
         install_git_hook
+        ;;
+    commit)
+        commit
         ;;
     model)
         pitch_model
