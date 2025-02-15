@@ -20,6 +20,63 @@ DISABLE_LOGS="true"
 
 parse_arguments "$@"
 
+ask() {
+    # Use provided argument as user input if available, otherwise prompt
+    local user_input="$1"
+    if [[ -z "$user_input" ]]; then
+        user_input=$(gum input --placeholder "Ask something..." --width "$(tput cols)")
+    fi
+
+    # Allow user to select models using gum checkbox
+    selected_models=$(ollama list | awk '{print $1}' | tail -n +2 | gum choose --no-limit)
+
+    # Convert selected_models into an array (compatible with older Bash versions)
+    IFS=$'\n' read -rd '' -a selected_models <<< "$selected_models"
+
+    # Validate selection
+    if [[ ${#selected_models[@]} -eq 0 ]]; then
+        echo "❌ No models selected. Exiting..."
+        return 1
+    fi
+
+    # Get terminal width and divide it by the number of selected models
+    total_width=$(tput cols)
+    model_count=${#selected_models[@]}
+    
+    # Prevent division by zero
+    if [[ "$model_count" -eq 0 ]]; then
+        echo "❌ No models selected. Exiting..."
+        return 1
+    fi
+    
+    box_width=$(( total_width / model_count - 4 ))  # Adjust width dynamically
+
+    # Initialize arrays to store responses and boxes
+    responses=()  # Using indexed array instead of associative array
+    boxes=()
+
+    # Query each selected model
+    for model in "${selected_models[@]}"; do
+        response=$(ollama run "$model" "$user_input")
+        responses+=("$response")
+    done
+
+    # Create styled boxes for each response
+    index=0
+    for model in "${selected_models[@]}"; do
+        formatted_response=$(echo "**🤖 $model Response:** ${responses[$index]}" | gum format --theme=dark)
+        box=$(gum style --border double --width "$box_width" --align left --padding "1 2" "$formatted_response")
+        boxes+=("$box")
+        ((index++))
+    done
+
+    # Display boxes side by side
+    gum join --align center "${boxes[@]}"
+}
+
+
+
+
 # ───────────────────────────────────────────────────────────
 # 🔹 INSTALLATION FUNCTIONS
 # ───────────────────────────────────────────────────────────
@@ -562,6 +619,9 @@ case "$1" in
         ;;
     readme)
         generate_readme
+        ;;
+    ask)
+        ask "$2"
         ;;
     *)
         show_help
