@@ -205,7 +205,7 @@ pitch_model() {
 
     echo "📦 Available Models in Ollama:"
     
-    # Get a numbered list of models
+    # Get a list of models
     local models=($(ollama list | grep pitch | awk '{print $1}'))
     
     if [[ ${#models[@]} -eq 0 ]]; then
@@ -213,21 +213,8 @@ pitch_model() {
         exit 1
     fi
 
-    for i in "${!models[@]}"; do
-        echo "$((i+1)). ${models[i]}"
-    done
-
-    # Ask the user to select a model
-    read -p "Enter the number of the model you'd like to use: " choice
-
-    # Validate input
-    if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#models[@]} )); then
-        echo "❌ Invalid choice. Please enter a valid number."
-        exit 1
-    fi
-
-    # Get the chosen model
-    local selected_model="${models[choice-1]}"
+    # Use gum choose to select a model
+    local selected_model=$(printf "%s\n" "${models[@]}" | gum choose --header "Select an AI model:" --cursor "➜")
     echo "✅ Selected model: $selected_model"
 
     # Read the file line by line, replace OLLAMA_MODEL if found
@@ -261,6 +248,7 @@ pitch_model() {
 
     echo "✅ Updated $config_file with OLLAMA_MODEL=$selected_model"
 }
+
 
 delete_models() {
     # Remove Ollama models directory
