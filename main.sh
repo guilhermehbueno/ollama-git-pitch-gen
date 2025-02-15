@@ -361,8 +361,6 @@ replace_template_values() {
     echo "$content"
 }
 
-
-
 commit() {
     local user_context=""
     local additional_prompt=""
@@ -382,6 +380,11 @@ commit() {
         esac
     done
 
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "❌ Not inside a Git repository."
+        exit 1
+    fi
+
     local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
@@ -395,7 +398,19 @@ commit() {
         local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
     fi
 
-    local prompt_content=$(cat ".git/hooks/commit.prompt")
+    # Check if the model exists
+    if ! ollama list | grep -q "$local_model"; then
+        echo "❌ Model '$local_model' not found. Please run 'pitch model' to select a valid model."
+        exit 1
+    fi
+
+    local prompt_file=".git/hooks/commit.prompt"
+    if [[ ! -f "$prompt_file" ]]; then
+        echo "❌ Commit prompt file not found at $prompt_file"
+        exit 1
+    fi
+
+    local prompt_content=$(cat "$prompt_file")
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
     gum pager "$commit_prompt" --timeout=5s
 
@@ -747,7 +762,41 @@ Output the README.md content only, without additional explanations.")
 # 🔹 SCRIPT EXECUTION LOGIC
 # ───────────────────────────────────────────────────────────
 
+# Add help function with detailed command descriptions
+show_help() {
+    cat << EOF
+Usage: pitch <command> [options]
+
+Commands:
+    install         Install Ollama and setup the environment
+    uninstall      Remove Ollama and clean up
+    start          Start Ollama server
+    stop           Stop Ollama server
+    info           Display system information
+    apply          Install Git hooks
+    commit         Generate AI-powered commit message
+    model          Select AI model
+    update         Update pitch to latest version
+    pr             Generate pull request
+    readme         Generate README.md
+
+Options:
+    --debug        Enable debug logging
+    --no-logs      Disable logging
+    --config=FILE  Use specific config file
+
+Examples:
+    pitch install
+    pitch commit -m "feat: add new feature"
+    pitch pr main --text-only
+EOF
+    exit 0
+}
+
 case "$1" in
+    help|-h|--help)
+        show_help
+        ;;
     install)
         install_ollama
         start_ollama
@@ -798,7 +847,7 @@ case "$1" in
         generate_readme
         ;;
     *)
-        echo "Usage: $0 {install|uninstall|start|stop|info|apply|delete}"
+        show_help
         exit 1
         ;;
 esac
