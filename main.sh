@@ -9,15 +9,13 @@ MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
-DISABLE_LOGS="true"
+DISABLE_LOGS="false"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
 # ───────────────────────────────────────────────────────────
 log() {
-    if [[ "$DISABLE_LOGS" != "true" ]]; then
-        gum log --level info "$1"
-    fi
+    gum log --level info "$1"
 }
 warn() {
     gum log --level warn "$1"
@@ -89,7 +87,7 @@ install_git_hook() {
     fi
 
     local hooks_dir="$git_root/.git/hooks"
-    local hook_file="$$hooks_dir/prepare-commit-msg"
+    local hook_file="$hooks_dir/prepare-commit-msg"
     local script_dir
     script_dir=$(dirname "$(realpath "$0")")
 
@@ -108,18 +106,18 @@ install_git_hook() {
     cp "$hook_source" "$hook_file"
     cp "$hook_properties" "$hook_file.properties"
 
-    cp "$commit_prompt" "$hooks_dir.commit.prompt"
-    cp "$pr_title_prompt" "$hooks_dir.pr-title.prompt"
-    cp "$pr_body_prompt" "$hooks_dir.pr-description.prompt"
+    cp "$commit_prompt" "$hooks_dir/commit.prompt"
+    cp "$pr_title_prompt" "$hooks_dir/pr-title.prompt"
+    cp "$pr_body_prompt" "$hooks_dir/pr-description.prompt"
 
     chmod +x "$hook_file"
 
     log "Git hook installed successfully."
-    log "- $hook_file"
-    log "- $hook_file.properties"
-    log "- $hooks_dir.commit.prompt"
-    log "- $hooks_dir.pr-title.prompt"
-    log "- $hooks_dir.pr-description.prompt"
+    log "$hook_file"
+    log "$hook_file.properties"
+    log "$hooks_dir.commit.prompt"
+    log "$hooks_dir.pr-title.prompt"
+    log "$hooks_dir.pr-description.prompt"
 }
 
 register_symlink() {
@@ -360,7 +358,6 @@ replace_template_values() {
 
 
 commit() {
-    # Parse command-line arguments
     local user_context=""
     local additional_prompt=""
     while [[ "$#" -gt 0 ]]; do
@@ -379,7 +376,6 @@ commit() {
         esac
     done
 
-    # Get the current staged changes
     local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
@@ -388,23 +384,14 @@ commit() {
     fi
 
     local config_file=".git/hooks/prepare-commit-msg.properties"
-    local prompt_content=$(cat "commit.prompt")
-    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
-    echo "loaded commit_prompt >>> $commit_prompt"
-    
     local local_model=$MODEL_PATH
     if [[ -f "$config_file" ]]; then
-        commit_prompt=$(grep "^OLLAMA_PROMPT=" "$config_file" | cut -d '=' -f2-)
         local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
     fi
 
-    # Incorporate user context and additional prompt into AI request
-    if [[ -n "$user_context" ]]; then
-        commit_prompt="$commit_prompt\nUser context: $user_context"
-    fi
-    if [[ -n "$additional_prompt" ]]; then
-        commit_prompt="$commit_prompt\n$additional_prompt"
-    fi
+    local prompt_content=$(cat ".git/hooks/commit.prompt")
+    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content" "USER_CONTEXT" "$user_context" "ADDITIONAL_PROMPT" "$additional_prompt")
+    echo "loaded commit_prompt >>> $commit_prompt"
 
     echo "📨 Generating AI commit message suggestion..."
     local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
