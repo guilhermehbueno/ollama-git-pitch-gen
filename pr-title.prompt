@@ -6,8 +6,8 @@
 ### Task:
 Generate a **clear and meaningful Pull Request title** summarizing the following information:
 
-- **Git Diff:** <DIFF_CONTENT>
-- **PR Description:** <PR_BODY>
+- **Git Diff:** DIFF_CONTENT
+- **PR Description:** PR_BODY
 
 ### Constraints:
 - The title must be **under 80 characters**.

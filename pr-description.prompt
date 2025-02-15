@@ -6,7 +6,7 @@
 ### Task:
 Generate a **concise and structured PR description** in Markdown format based on the following Git diff:
 
-<DIFF_CONTENT>
+DIFF_CONTENT
 
 ### Constraints:
 - The output must follow the given Markdown structure.

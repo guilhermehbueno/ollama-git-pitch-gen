@@ -88,12 +88,17 @@ install_git_hook() {
         error "Not inside a Git repository."
     fi
 
-    local hook_file="$git_root/.git/hooks/prepare-commit-msg"
+    local hooks_dir="$git_root/.git/hooks"
+    local hook_file="$$hooks_dir/prepare-commit-msg"
     local script_dir
     script_dir=$(dirname "$(realpath "$0")")
 
     local hook_source="$script_dir/prepare-commit-msg.sh"
     local hook_properties="$script_dir/prepare-commit-msg.properties"
+    
+    local commit_prompt="$script_dir/commit.prompt"
+    local pr_title_prompt="$script_dir/pr-title.prompt"
+    local pr_body_prompt="$script_dir/pr-description.prompt"
 
     if [[ ! -f "$hook_source" ]]; then
         error "Hook script '$hook_source' not found."
@@ -102,11 +107,19 @@ install_git_hook() {
     log "Installing Git hook..."
     cp "$hook_source" "$hook_file"
     cp "$hook_properties" "$hook_file.properties"
+
+    cp "$commit_prompt" "$hooks_dir.commit.prompt"
+    cp "$pr_title_prompt" "$hooks_dir.pr-title.prompt"
+    cp "$pr_body_prompt" "$hooks_dir.pr-description.prompt"
+
     chmod +x "$hook_file"
 
     log "Git hook installed successfully."
     log "- $hook_file"
     log "- $hook_file.properties"
+    log "- $hooks_dir.commit.prompt"
+    log "- $hooks_dir.pr-title.prompt"
+    log "- $hooks_dir.pr-description.prompt"
 }
 
 register_symlink() {
@@ -374,7 +387,6 @@ commit() {
         exit 1
     fi
 
-    
     local config_file=".git/hooks/prepare-commit-msg.properties"
     local prompt_content=$(cat "commit.prompt")
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
@@ -409,7 +421,7 @@ commit() {
         commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
         
         echo "📨 Refining AI commit message suggestion..."
-        suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a refined commit message based on the provided context and the following changes: $diff_content Format output as: <commit message>")
+        suggested_message=$(ollama run "$local_model" "$commit_prompt")
         # Final user confirmation
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     done
