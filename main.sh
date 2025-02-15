@@ -411,8 +411,16 @@ commit() {
         extra_context="$extra_context\n$user_addition"
 
         # Prepare refined commit prompt
-        commit_prompt="$commit_prompt\n\n### User Clarification:\n$extra_context"
-        commit_prompt="$commit_prompt\n\n### Previous Suggestion:\n$suggested_message"
+        commit_prompt="
+            $commit_prompt
+            ### User Clarification:
+            $extra_context
+        "
+        commit_prompt="
+            $commit_prompt
+            ### Previous Suggestion:
+            $suggested_message
+        "
         gum pager "$commit_prompt"
 
         echo "📨 Refining AI commit message suggestion..."
