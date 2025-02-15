@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
 source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/model.sh"
 source "$SCRIPT_DIR/lib/git.sh"
