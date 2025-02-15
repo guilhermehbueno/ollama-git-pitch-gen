@@ -404,14 +404,21 @@ commit() {
     # If user did not provide -m, ask if they want to clarify
     local extra_context=""
     while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; do
-        extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 15)
-        commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
-        
+        user_addition=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 15)
+
+        # Append the new user context while keeping previous suggestions
+        extra_context="$extra_context\n$user_addition"
+
+        # Prepare refined commit prompt
+        commit_prompt="$commit_prompt\n\n### User Clarification:\n$extra_context"
+
         echo "📨 Refining AI commit message suggestion..."
-        suggested_message=$(ollama run "$local_model" "$commit_prompt")
-        # Final user confirmation
-    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
+        suggested_message=$(ollama run "$local_model" "$commit_prompt\n\n### Previous Suggestion:\n$suggested_message")
+
+        # Display refined commit message
+        echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     done
+
 
     # Final user confirmation
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark

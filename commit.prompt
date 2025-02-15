@@ -13,7 +13,14 @@ Generate a **concise and meaningful Git commit message** summarizing the followi
 
 ---
 
-DIFF_CONTENT
+### User Clarification:
+If the user has provided additional context, integrate it meaningfully into the commit message.
+<USER_CONTEXT>
+
+---
+
+### Diff:
+<DIFF_CONTENT>
 
 ---
 
