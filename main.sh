@@ -513,9 +513,9 @@ info() {
         latest_local_commit=$(git rev-parse HEAD)
         latest_remote_commit=$(git ls-remote origin -h refs/heads/main | awk '{print $1}')
 
-        markdown_output+=$'\n🔍 **Latest installed commit:** '"$latest_local_commit"$''
+        markdown_output+=$'\n🔍 Latest installed commit: '"$latest_local_commit"$''
         if [[ "$latest_local_commit" != "$latest_remote_commit" ]]; then
-            markdown_output+=$'\n⚠️ **A new update is available. Run 'pitch update' to get the latest version.**'
+            markdown_output+=$'\n⚠️  A new update is available. Run \'pitch update\' to get the latest version.'
         else
             markdown_output+=$'\n✅ **Your installation is up to date.**'
         fi
