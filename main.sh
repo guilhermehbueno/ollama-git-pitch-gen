@@ -390,7 +390,7 @@ commit() {
         fi
 
         # Commit with the final message
-        git commit -m "$commit_message" --no-verify
+        git commit -m "$commit_message"
         echo "✅ Commit successful!"
     else
         echo "❌ Commit aborted."
