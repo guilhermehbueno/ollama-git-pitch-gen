@@ -11,23 +11,27 @@ MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
+DISABLE_LOGS="true"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
 # ───────────────────────────────────────────────────────────
 
 log() {
-    echo -e "\033[1;34m[INFO]\033[0m $1"  # Blue color
+    if [[ "$DISABLE_LOGS" != "true" ]]; then
+        gum log --level info "$1"
+    fi
 }
 
 warn() {
-    echo -e "\033[1;33m[WARNING]\033[0m $1"  # Yellow color
+    gum log --level warn "$1"
 }
 
 error() {
-    echo -e "\033[1;31m[ERROR]\033[0m $1"  # Red color
+    gum log --level error "$1"
     exit 1
 }
+
 
 # ───────────────────────────────────────────────────────────
 # 🔹 INSTALLATION FUNCTIONS
@@ -402,79 +406,93 @@ commit() {
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
-
 info() {
     log "Gathering system and installation information..."
 
-    echo "🖥️  OS: $(uname -a)"
-    echo "💻 Shell: $SHELL"
+    local markdown_output=""
 
+    markdown_output+=$'\n**🖥️   OS:** '"$(uname -a)"$''
+    markdown_output+=$'\n**💻  Shell:** '"$SHELL"$''
+
+    log "Checking if Ollama is installed..."
     if command -v ollama >/dev/null 2>&1; then
-        echo "✅ Ollama installed: $(ollama --version)"
+        markdown_output+=$'\n✅ **Ollama installed:** '"$(ollama --version)"$''
     else
-        echo "❌ Ollama is NOT installed."
+        markdown_output+=$'\n❌ **Ollama is NOT installed.**'
     fi
 
+    log "Checking if Ollama server is running..."
     if pgrep -f "ollama serve" >/dev/null; then
-        echo "✅ Ollama server is running."
+        markdown_output+=$'\n✅ **Ollama server is running.**'
     else
-        echo "❌ Ollama server is NOT running."
+        markdown_output+=$'\n❌ **Ollama server is NOT running.**'
     fi
 
-    echo "📦 Available Models:"
-    ollama list 2>/dev/null | grep -v "GIN" || echo "❌ No models found."
+    log "Listing available Ollama models..."
+    markdown_output+=$'\n📦 **Available Models:**'
+    models=$(ollama list 2>/dev/null | grep -v "GIN")
+    if [[ -n "$models" ]]; then
+        markdown_output+="$models\n"
+    else
+        markdown_output+=$'\n❌ **No models found.**'
+    fi
 
+    log "Checking if inside a Git repository..."
     git_root=$(git rev-parse --show-toplevel 2>/dev/null)
     if [[ -n "$git_root" ]]; then
+        log "Git repository detected at: $git_root"
         hook_path="$git_root/.git/hooks/prepare-commit-msg"
         config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
 
+        log "Checking Git hooks..."
         if [[ -f "$hook_path" ]]; then
-            echo "✅ Git hook installed at $hook_path"
+            markdown_output+=$'\n✅ **Git hook installed at:** '"$hook_path"$''
         else
-            echo "❌ Git hook NOT installed."
+            markdown_output+=$'\n❌ **Git hook NOT installed.**'
         fi
 
-        # Read the model name from the .properties file
+        log "Checking commit message configuration..."
         if [[ -f "$config_file" ]]; then
             model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
             if [[ -n "$model_name" ]]; then
-                echo "🤖 Current AI Model: $model_name"
+                markdown_output+=$'\n🤖 **Current AI Model:** '"$model_name"$''
             else
-                echo "❌ No model set in $config_file."
+                markdown_output+=$'\n❌ **No model set in $config_file.**'
             fi
         else
-            echo "❌ Configuration file not found: $config_file"
+            markdown_output+=$'\n❌ **Configuration file not found:** '"$config_file"$''
         fi
-
     else
-        echo "❌ Not inside a Git repository."
+        markdown_output+=$'\n❌ **Not inside a Git repository.**'
     fi
 
-    # Check if the symlink exists for the pitch executable
+    log "Checking symlink for pitch executable..."
     symlink_target="$HOME/.local/bin/pitch"
     if [[ -L "$symlink_target" ]]; then
-        echo "🔗 Symlink for pitch is set up at: $(readlink -f "$symlink_target")"
+        markdown_output+=$'\n🔗 **Symlink for pitch is set up at:** '"$(readlink -f "$symlink_target")"$''
     else
-        echo "❌ Symlink for pitch is NOT set up."
+        markdown_output+=$'\n❌ **Symlink for pitch is NOT set up.**'
     fi
 
-    # Check latest commit hash and recommend updates
+    log "Checking latest commit hash..."
     install_dir="$HOME/.ollama-git-pitch-gen"
     if [[ -d "$install_dir" ]]; then
         cd "$install_dir"
         latest_local_commit=$(git rev-parse HEAD)
         latest_remote_commit=$(git ls-remote origin -h refs/heads/main | awk '{print $1}')
 
-        echo "🔍 Latest installed commit: $latest_local_commit"
+        markdown_output+=$'\n🔍 **Latest installed commit:** '"$latest_local_commit"$''
         if [[ "$latest_local_commit" != "$latest_remote_commit" ]]; then
-            echo "⚠️ A new update is available. Run 'pitch update' to get the latest version."
+            markdown_output+=$'\n⚠️ **A new update is available. Run 'pitch update' to get the latest version.**'
         else
-            echo "✅ Your installation is up to date."
+            markdown_output+=$'\n✅ **Your installation is up to date.**'
         fi
     else
-        echo "❌ Installation directory not found: $install_dir"
+        markdown_output+=$'\n❌ **Installation directory not found:** '"$install_dir"$''
     fi
+
+    # Render the markdown output at the end
+    echo -e "$markdown_output" | gum format --theme=dark
 }
 
 # Function to generate a PR description in Markdown
