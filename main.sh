@@ -391,7 +391,7 @@ commit() {
 
     local prompt_content=$(cat ".git/hooks/commit.prompt")
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
-    echo "loaded commit_prompt >>> $commit_prompt"
+    gum pager "$commit_prompt"
 
     echo "📨 Generating AI commit message suggestion..."
     local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
@@ -401,23 +401,41 @@ commit() {
         suggested_message=""
     fi
 
+    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     # If user did not provide -m, ask if they want to clarify
     local extra_context=""
     while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; do
-        extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 40)
-        commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
-        
+        user_addition=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 15)
+
+        # Append the new user context while keeping previous suggestions
+        extra_context="$extra_context\n$user_addition"
+
+        # Prepare refined commit prompt
+        commit_prompt="
+            $commit_prompt
+            ### User Clarification:
+            $extra_context
+        "
+        commit_prompt="
+            $commit_prompt
+            ### Previous Suggestion:
+            $suggested_message
+        "
+        gum pager "$commit_prompt"
+
         echo "📨 Refining AI commit message suggestion..."
         suggested_message=$(ollama run "$local_model" "$commit_prompt")
-        # Final user confirmation
-    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
+
+        # Display refined commit message
+        echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     done
+
 
     # Final user confirmation
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     if gum confirm "Would you like to proceed with this commit message?"; then
         # Use Gum to allow user to make final edits
-        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 40)
+        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 15)
 
         # Ensure commit message is not empty
         if [[ -z "$commit_message" ]]; then
