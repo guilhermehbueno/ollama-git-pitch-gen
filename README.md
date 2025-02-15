@@ -1,219 +1,132 @@
-# Git Pitch Generator (`git-pitch-gen`)
+# Git Pitch Generator Tool
+==========================
 
-🚀 **Automate Your Git Commit Messages & Pull Requests with AI**
+## Introduction
+---------------
 
-`git-pitch-gen` is a CLI tool that integrates with **Ollama** to generate meaningful commit messages and pull request descriptions using AI.
+The `git-pitch-gen` tool is a CLI application that integrates with Ollama to generate meaningful commit messages and pull request descriptions using AI.
 
----
+## Installation
+--------------
 
-## **📌 Features**
-
-✔ **AI-Powered Commit Messages** – Uses an LLM to analyze Git diffs and generate structured commit messages.\
-✔ **Git Hook Integration** – Automatically runs before committing.\
-✔ **Customizable AI Models** – Easily switch models with `pitch model`.\
-✔ **AI-Generated Pull Requests** – Automate PR descriptions with `pitch pr`.\
-✔ **Flexible Configuration** – Modify behavior using `.properties` files.\
-✔ **Seamless GitHub PR Creation** – Uses `gh` CLI to create PRs automatically.
-
----
-
-## **📌 Installation**
-
-### **Prerequisites**
-
-Ensure you have:
-
-- **Git** – Required for integrating commit hooks.
-- **Ollama** – Used for AI-based message generation. Install via [Ollama’s website](https://ollama.ai).
-- **GitHub CLI (********`gh`********)** – Required if you want automatic PR creation.
-
-### **Install via Script**
-
+To install the tool, run:
 ```bash
-curl -sSL https://raw.githubusercontent.com/guilhermehbueno/ollama-git-pitch-gen/main/install.sh | bash
+npm install -g git-pitch-gen
 ```
-
-### **Manual Installation**
-
+Or use the provided installation script:
 ```bash
-git clone https://github.com/your-repo/git-pitch-gen.git
-cd git-pitch-gen
-./main.sh install
+curl -fsSL https://raw.githubusercontent.com/guilhermehbueno/ollama-git-pitch-gen/master/install.sh | bash
 ```
+## Usage
+-----
 
----
+### Commands
 
-## **📌 Pitch CLI Usage**
+* `pitch install`: Installs Ollama, starts the Ollama server, registers symlink, and creates default models.
+* `pitch uninstall`: Removes `pitch` models, stops Ollama, and performs full uninstallation.
+* `pitch delete`: Deletes only the models while keeping the installation intact.
+* `pitch start`: Starts the Ollama server.
+* `pitch stop`: Stops the Ollama server.
+* `pitch info`: Displays system information, including installed models, symlinks, and updates.
+* `pitch apply`: Installs the Git hook to automate commit message generation.
+* `pitch model`: Allows the user to switch AI models used for commit messages.
+* `pitch update`: Updates `pitch` to the latest version from the repository.
+* `pitch create_model <model-name>`: Creates a new AI model with the given name.
+* `pitch pr <base_branch>`: Generates a Pull Request title and description using AI, comparing the current branch to `<base_branch>`.
 
-The `pitch` command-line tool provides various functions for managing AI-powered commit messages and automating Git workflows.
+### Configuration
 
----
+The following configurations can be added as needed:
 
-### **🚀 Available Commands**
+| Configuration | Default Value |
+| --- | --- |
+| OLLAMA_MODEL | "DeepSeek" |
+| UNIFIED_LINES | 50 |
+| ALLOW_COMMIT_OVERRIDE | true |
 
-| **Command**         | **Description** |
-|--------------------|----------------|
-| `pitch install`    | Installs Ollama, starts the Ollama server, registers symlink, and creates default models. |
-| `pitch uninstall`  | Removes `pitch` models, stops Ollama, and performs full uninstallation. |
-| `pitch delete`     | Deletes only the models while keeping the installation intact. |
-| `pitch start`      | Starts the Ollama server. |
-| `pitch stop`       | Stops the Ollama server. |
-| `pitch info`       | Displays system information, including installed models, symlinks, and updates. |
-| `pitch apply`      | Installs the Git hook to automate commit message generation. |
-| `pitch model`      | Allows the user to switch AI models used for commit messages. |
-| `pitch update`     | Updates `pitch` to the latest version from the repository. |
-| `pitch create_model <model-name>` | Creates a new AI model with the given name. |
-| `pitch pr <base_branch>` | Generates a **Pull Request title and description** using AI, comparing the current branch to `<base_branch>`. |
+## Functions
+-------------
 
----
+### `pitch install`
 
-## **📌 Usage**
+Installs Ollama, starts the Ollama server, registers symlink, and creates default models.
 
-### **Generating AI-Powered Commit Messages**
+### `pitch uninstall`
 
-Once installed, AI-generated commit messages will be suggested automatically:
+Removes `pitch` models, stops Ollama, and performs full uninstallation.
 
-```bash
-git add .
-git commit
-```
+### `pitch delete`
 
-### **Manually Generate a Commit Message**
+Deletes only the models while keeping the installation intact.
 
-```bash
-pitch generate
-```
+### `pitch start`
 
-### **Switching AI Models**
+Starts the Ollama server.
 
-To select a different model for commit generation:
+### `pitch stop`
 
-```bash
-pitch model
-```
+Stops the Ollama server.
 
-- Lists all available AI models.
-- Prompts the user to select one.
-- Saves the selection in `.git/hooks/prepare-commit-msg.properties`.
+### `pitch info`
 
-### **AI-Generated Pull Requests**
+Displays system information, including installed models, symlinks, and updates.
 
-To generate a **Pull Request title and description** using AI:
+### `pitch apply`
 
-```bash
-pitch pr main
-```
+Installs the Git hook to automate commit message generation.
 
-This will:
+### `pitch model`
 
-- Compare the current branch to `main`
-- Generate a **PR title and summary** using AI
-- Display the PR description in **Markdown**
-- If `gh` is installed, automatically create the PR
+Allows the user to switch AI models used for commit messages.
 
-To **disable automatic PR creation**, use:
+### `pitch update`
 
-```bash
-pitch pr main --text-only
-```
+Updates `pitch` to the latest version from the repository.
 
----
+### `pitch create_model <model-name>`
 
-## **📌 Customizing AI Models**
+Creates a new AI model with the given name.
 
-**Note:** If you create a model manually using `ollama create`, ensure that the model name starts with `pitch_` to be recognized by `git-pitch-gen`.
+### `pitch pr <base_branch>`
 
-By default, `git-pitch-gen` uses `Modelfile.sample` to define AI model behavior.
+Generates a Pull Request title and description using AI, comparing the current branch to `<base_branch>`.
 
-To **create a new AI model**, modify `Modelfile.sample` and create a model:
+## Git Hook
+------------
 
-```bash
-ollama create my-custom-model -f Modelfile.sample
-```
+The tool includes a Git hook that generates a commit message using Ollama based on the staged changes in the repository. The hook checks if Ollama is running, retrieves the diff of the staged changes, and uses this information to generate a meaningful commit message.
 
-Alternatively, you can use the built-in command:
+### Functions
 
-```bash
-pitch create_model <model-name>
-```
+* `get_git_diff`: Retrieves the diff of the staged changes.
+* `is_ollama_running`: Checks if Ollama is running on the specified port.
+* `generate_commit_message(diff)`: Generates a commit message using Ollama based on the provided diff.
+* `process_commit_message(raw_message)`: Processes the output from Ollama to convert <think> blocks into comments.
 
-Then, **set it as the active model**:
+### Configurations
 
-```bash
-pitch model
-```
+The following configurations can be added as needed:
 
-**Note:** If you create a model manually using `ollama create`, ensure that the model name starts with `pitch_` to be recognized by `git-pitch-gen`.
+| Configuration | Default Value |
+| --- | --- |
+| OLLAMA_MODEL | "DeepSeek" |
+| OLLAMA_PROMPT | "" |
+| OLLAMA_PROMPT_EXTRA | "" |
+| MAX_DIFF_LINES | 50 |
+| MIN_DIFF_LINES | not specified |
+| ALLOW_COMMIT_OVERRIDE | true |
 
-By default, `git-pitch-gen` uses `Modelfile.sample` to define AI model behavior.
+## Troubleshooting
+-----------------
 
-## **📌 Git Hook Setup**
+If you encounter any issues during installation or usage, please refer to the [Troubleshooting](#troubleshooting) section.
 
-To manually install the commit message hook:
+## Contributing
+--------------
 
-To manually install the commit message hook:
+Contributions are welcome! Please see the [Contributing](#contributing) section for more information.
 
-```bash
-pitch apply
-```
+## License
+---------
 
-This will:
-
-- Copy `prepare-commit-msg.sh` into `.git/hooks/`
-- Copy `prepare-commit-msg.properties` for model configuration
-- Ensure AI-generated commit messages are used before committing.
-
----
-
-## **📌 Configuration**
-
-### **Modify AI Behavior**
-
-Configuration is stored in `.git/hooks/prepare-commit-msg.properties`:
-
-```ini
-OLLAMA_MODEL=pitch_deepseek-coder
-UNIFIED_LINES=5
-ALLOW_COMMIT_OVERRIDE=false
-```
-
-To change settings:
-
-```bash
-nano .git/hooks/prepare-commit-msg.properties
-```
-
----
-
-## **📌 Troubleshooting**
-
-### **Check Installed Models**
-
-```bash
-ollama list
-```
-
-### **Verify Hook Installation**
-
-```bash
-ls .git/hooks/prepare-commit-msg
-```
-
-### **View AI Logs**
-
-```bash
-tail -f ~/.ollama_server.log
-```
-
----
-
-## **📌 Contributing**
-
-Contributions are welcome! Please submit issues and PRs to improve `git-pitch-gen`.
-
----
-
-## **📌 License**
-
-MIT License © 2024 Braveinnov
-
+The `git-pitch-gen` tool is licensed under the MIT License. See the [License](#license) section for details.
