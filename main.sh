@@ -314,8 +314,24 @@ update_pitch() {
 }
 
 commit() {
-    # Ensure Gum is installed
-    install_gum
+    # Parse command-line arguments
+    local user_context=""
+    local additional_prompt=""
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            -m)
+                user_context="$2"
+                shift 2
+                ;;
+            -p)
+                additional_prompt="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
 
     # Get the current staged changes
     local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
@@ -333,6 +349,14 @@ commit() {
         local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
     fi
 
+    # Incorporate user context and additional prompt into AI request
+    if [[ -n "$user_context" ]]; then
+        commit_prompt="$commit_prompt\nUser context: $user_context"
+    fi
+    if [[ -n "$additional_prompt" ]]; then
+        commit_prompt="$commit_prompt\n$additional_prompt"
+    fi
+
     echo "📨 Generating AI commit message suggestion..."
     local suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a concise and meaningful Git commit message for the following changes: $diff_content Format output as: <commit message>")
 
@@ -341,20 +365,41 @@ commit() {
         suggested_message=""
     fi
 
-    # Use Gum to prompt the user for their commit message with AI suggestion
-    local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width 80 --height 10)
-
-    # Ensure commit message is not empty
-    if [[ -z "$commit_message" ]]; then
-        echo "❌ Commit message cannot be empty."
-        exit 1
+    # Ask user if they want to provide additional context, but only if -m was not provided
+    if [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; then
+        local extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 10)
+        commit_prompt="$commit_prompt
+Additional user clarification: $extra_context"
+        
+        echo "📨 Refining AI commit message suggestion..."
+        suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a refined commit message based on the provided context and the following changes: $diff_content Format output as: <commit message>")
+    firm "Would you like to clarify the commit message by providing more context?"; then
+        local extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 10)
+        commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
+        
+        echo "📨 Refining AI commit message suggestion..."
+        suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a refined commit message based on the provided context and the following changes: $diff_content Format output as: <commit message>")
     fi
 
-    # Commit with the final message
-    git commit -m "$commit_message"
-    echo "✅ Commit successful!"
-}
+    # Final user confirmation
+    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
+    if gum confirm "Would you like to proceed with this commit message?"; then
+        # Use Gum to allow user to make final edits
+        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 10)
 
+        # Ensure commit message is not empty
+        if [[ -z "$commit_message" ]]; then
+            echo "❌ Commit message cannot be empty."
+            exit 1
+        fi
+
+        # Commit with the final message
+        git commit -m "$commit_message"
+        echo "✅ Commit successful!"
+    else
+        echo "❌ Commit aborted."
+    fi
+}
 
 
 
