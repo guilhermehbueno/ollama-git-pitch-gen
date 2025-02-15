@@ -329,6 +329,23 @@ update_pitch() {
     fi
 }
 
+replace_template_values() {
+    local template="$1"
+    local content=""
+    shift
+
+    while [[ "$#" -gt 0 ]]; do
+        local key="$1"
+        local value="$2"
+        shift 2
+        key="$key"
+        content=$(echo "${template//$key/$value}")
+    done
+    echo "$content"
+}
+
+
+
 commit() {
     # Parse command-line arguments
     local user_context=""
@@ -357,14 +374,12 @@ commit() {
         exit 1
     fi
 
-    local config_file=".git/hooks/prepare-commit-msg.properties"
-    local commit_prompt="
-    ### Instruction:
-    Do not include an introduction, preface, or explanation. Respond only with the PR description.
     
-    ### Task:
-    Generate a concise and meaningful Git commit message for the following changes:
-    "
+    local config_file=".git/hooks/prepare-commit-msg.properties"
+    local prompt_content=$(cat "commit.prompt")
+    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
+    echo "loaded commit_prompt >>> $commit_prompt"
+    
     local local_model=$MODEL_PATH
     if [[ -f "$config_file" ]]; then
         commit_prompt=$(grep "^OLLAMA_PROMPT=" "$config_file" | cut -d '=' -f2-)

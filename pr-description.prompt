@@ -1,0 +1,38 @@
+### Instruction:
+- Respond **only** with the PR description.
+- Do **not** include an introduction, preface, or explanation.
+- Format the output strictly as specified.
+
+### Task:
+Generate a **concise and structured PR description** in Markdown format based on the following Git diff:
+
+<DIFF_CONTENT>
+
+### Constraints:
+- The output must follow the given Markdown structure.
+- The **summary must be clear and concise**.
+- The **list of changes should accurately reflect modified files**.
+- Use **concise bullet points** for clarity.
+
+### Response Format:
+## 📌 Summary
+<PR Summary>
+
+## 🔄 Changes Made
+- List modified files
+
+## 🛠 How to Test
+1. Steps to validate the changes
+
+## ✅ Checklist
+- [ ] Code follows project guidelines
+- [ ] Tests have been added/updated
+- [ ] Documentation is updated if needed
+
+### 🚀 What’s Improved?
+✔ **Explicit structure to enforce Markdown formatting**  
+✔ **Ensures concise and structured output**  
+✔ **Prevents unnecessary LLaMA-generated introductions**  
+✔ **Forces strict adherence to response format**  
+
+🚀 **Now, LLaMA will generate a perfectly structured PR description!** Let me know if you need refinements! 🚀

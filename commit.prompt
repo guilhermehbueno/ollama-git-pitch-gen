@@ -1,0 +1,21 @@
+### Instruction:
+- Respond only with the commit message.
+- Do not include an introduction, explanation, or commentary.
+- The message must be clear, concise, and follow best practices.
+
+### Task:
+Generate a **concise and meaningful Git commit message** summarizing the following changes.
+
+### Context:
+- The commit message should be in an **imperative tone** (e.g., "Fix bug in login").
+- Do **not** include phrases like "This commit" or "Here is your message".
+- Keep it **under 72 characters** to follow conventional commit message guidelines.
+
+---
+
+DIFF_CONTENT
+
+---
+
+### Format:
+<commit message>

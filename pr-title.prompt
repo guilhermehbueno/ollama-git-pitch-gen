@@ -1,0 +1,19 @@
+### Instruction:
+- Respond **only** with the PR title.
+- Do **not** include an introduction, preface, or explanation.
+- Keep the title concise, **under 80 characters**.
+
+### Task:
+Generate a **clear and meaningful Pull Request title** summarizing the following information:
+
+- **Git Diff:** <DIFF_CONTENT>
+- **PR Description:** <PR_BODY>
+
+### Constraints:
+- The title must be **under 80 characters**.
+- Use an **imperative tone** (e.g., "Fix bug in login flow").
+- Do **not** include phrases like "This PR" or "Pull Request".
+- Avoid unnecessary words or redundant context.
+
+### Response:
+<PR Title>
