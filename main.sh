@@ -325,8 +325,6 @@ commit() {
         exit 1
     fi
 
-    echo "📨 Generating AI commit message suggestion..."
-        # Load commit prompt from the .properties file in the hooks directory
     local config_file=".git/hooks/prepare-commit-msg.properties"
     local commit_prompt="Generate a concise and meaningful Git commit message for the following changes:"
     local local_model=$MODEL_PATH
@@ -344,7 +342,7 @@ commit() {
     fi
 
     # Use Gum to prompt the user for their commit message with AI suggestion
-    local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message")
+    local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width 80 --height 10)
 
     # Ensure commit message is not empty
     if [[ -z "$commit_message" ]]; then
