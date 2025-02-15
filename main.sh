@@ -1,9 +1,7 @@
 #!/bin/bash
-
 # ───────────────────────────────────────────────────────────
 # 🔹 GLOBAL VARIABLES
 # ───────────────────────────────────────────────────────────
-
 MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
 HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
 MODEL_DIR="$HOME/models"  # Directory to store the model
@@ -16,27 +14,53 @@ DISABLE_LOGS="true"
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
 # ───────────────────────────────────────────────────────────
-
 log() {
     if [[ "$DISABLE_LOGS" != "true" ]]; then
         gum log --level info "$1"
     fi
 }
-
 warn() {
     gum log --level warn "$1"
 }
-
 error() {
     gum log --level error "$1"
     exit 1
 }
 
+# ───────────────────────────────────────────────────────────
+# 🔹 PARSE ARGUMENTS FUNCTIONS
+# ───────────────────────────────────────────────────────────
+parse_arguments() {
+    local prev_key=""
+
+    for arg in "$@"; do
+        if [[ "$arg" == --* ]]; then
+            prev_key=""
+            value=""
+            if [[ "$arg" == *=* ]]; then
+                prev_key="${arg%%=*}"  # Extract key before '='
+                prev_key="${prev_key#--}"  # Remove '--' prefix
+                prev_key="${prev_key//-/_}"  # Convert dashes to underscores for valid variable names
+                prev_key=$(echo "$prev_key" | tr '[:lower:]' '[:upper:]')  # Convert to uppercase
+                value="${arg#*=}"  # Extract value after '='
+                log "Declaring: $prev_key=${value}"
+                eval "$prev_key"="$value"
+            else
+                prev_key="${arg#--}"  # Remove '--' prefix
+                prev_key="${prev_key//-/_}"  # Convert dashes to underscores
+                prev_key=$(echo "$prev_key" | tr '[:lower:]' '[:upper:]')  # Convert to uppercase
+                log "Declaring: $prev_key=true"
+                eval "$prev_key"=true
+            fi
+        fi
+    done
+}
+# Call the argument parser at the start of the script
+parse_arguments "$@"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 INSTALLATION FUNCTIONS
 # ───────────────────────────────────────────────────────────
-
 install_ollama() {
     log "Checking Ollama installation..."
     if command -v ollama >/dev/null 2>&1; then
@@ -334,7 +358,13 @@ commit() {
     fi
 
     local config_file=".git/hooks/prepare-commit-msg.properties"
-    local commit_prompt="Generate a concise and meaningful Git commit message for the following changes:"
+    local commit_prompt="
+    ### Instruction:
+    Do not include an introduction, preface, or explanation. Respond only with the PR description.
+    
+    ### Task:
+    Generate a concise and meaningful Git commit message for the following changes:
+    "
     local local_model=$MODEL_PATH
     if [[ -f "$config_file" ]]; then
         commit_prompt=$(grep "^OLLAMA_PROMPT=" "$config_file" | cut -d '=' -f2-)
@@ -350,7 +380,7 @@ commit() {
     fi
 
     echo "📨 Generating AI commit message suggestion..."
-    local suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a concise and meaningful Git commit message for the following changes: $diff_content Format output as: <commit message>")
+    local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
 
     if [[ -z "$suggested_message" ]]; then
         echo "❌ Failed to generate commit message. Please type your own."
@@ -514,21 +544,12 @@ generate_pr_markdown() {
 
     # Get the Git diff between base branch and the current branch
     echo "🔍 Comparing $base_branch to $branch_name..."
-    diff_content=$(git diff $base_branch..$branch_name --unified=3 --no-color | tail -n 100)
+    diff_content=$(git diff "$base_branch".."$branch_name" --unified=3 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
         echo "❌ No differences found between $base_branch and $branch_name."
         exit 1
     fi
-
-    # Get PR title from Ollama
-    echo "📨 Generating PR title..."
-    pr_title=$(ollama run "$model_name" "Generate a concise Pull Request title based on the following Git diff:
-
-$diff_content
-
-Format output as:
-<PR Title>")
 
     if [[ -z "$pr_title" ]]; then
         pr_title="Auto-generated PR Title"
@@ -536,43 +557,60 @@ Format output as:
 
     # Get PR description from Ollama
     echo "📨 Generating PR description..."
-    pr_body=$(ollama run "$model_name" "Generate a concise Pull Request description in Markdown format for the following Git diff:
+    local pr_body_prompt="
+    ### Instruction:
+    Do not include an introduction, preface, or explanation. Respond only with the PR description.
+    
+    ### Task:
+    Generate a concise PR description in Markdown format for the following Git diff:
+        $diff_content
 
-$diff_content
+        Format output as:
+        ## 📌 Summary
+        <PR Summary>
 
-Format output as:
-## 📌 Summary
-<PR Summary>
+        ## 🔄 Changes Made
+        - List modified files
 
-## 🔄 Changes Made
-- List modified files
+        ## 🛠 How to Test
+        1. Steps to validate the changes
 
-## 🛠 How to Test
-1. Steps to validate the changes
+        ## ✅ Checklist
+        - [ ] Code follows project guidelines
+        - [ ] Tests have been added/updated
+        - [ ] Documentation is updated if needed
+    "
+    pr_body=$(ollama run "$model_name" "$pr_body_prompt")
 
-## ✅ Checklist
-- [ ] Code follows project guidelines
-- [ ] Tests have been added/updated
-- [ ] Documentation is updated if needed
+    # Get PR title from Ollama
+    echo "📨 Generating PR title..."
+    local pr_title_prompt="
+    ### Instruction:
+    Do not include an introduction, preface, or explanation. Respond only with the PR title.
 
-## 📜 Related Issues / Tickets
-- Fixes #...
+    ### Task:
+    Generate a concise Pull Request title based on the following:
+     - diff: $diff_content:
+     - description: $pr_body
 
-## 📝 Additional Notes
-- Any extra information reviewers should know")
+    Respond with only the PR title."
+    pr_title=$(ollama run "$model_name" "$pr_title_prompt")
 
-    # Print the PR output
-    echo "# $pr_title"
-    echo "$pr_body"
+    # Format the PR message using gum
+    formatted_pr=$(echo -e "# $pr_title\n\n$pr_body" | gum format --theme=dark)
+
+    # Display formatted PR message
+    echo "$formatted_pr"
 
     # Check if GitHub CLI is installed and --text-only flag is NOT provided
-    if command -v gh >/dev/null 2>&1 && [[ "$text_only_flag" != "--text-only" ]]; then
+    if command -v gh >/dev/null 2>&1 && [[ "$TEXT_ONLY" != "true" ]]; then
         echo "🔗 Creating GitHub Pull Request..."
         gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
     else
         echo "ℹ️ Skipping GitHub PR creation (either --text-only flag is set or gh CLI is missing)."
     fi
 }
+
 
 generate_readme() {
     local model_name
