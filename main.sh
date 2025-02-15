@@ -390,7 +390,7 @@ commit() {
     fi
 
     local prompt_content=$(cat ".git/hooks/commit.prompt")
-    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content" "USER_CONTEXT" "$user_context" "ADDITIONAL_PROMPT" "$additional_prompt")
+    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
     echo "loaded commit_prompt >>> $commit_prompt"
 
     echo "📨 Generating AI commit message suggestion..."
