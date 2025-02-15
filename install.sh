@@ -31,7 +31,40 @@ install_dependencies() {
     if ! command_exists gh; then
         echo "⚠️ GitHub CLI (gh) is not installed. PR automation will be disabled."
     fi
+
+    install_gum
 }
+
+
+install_gum() {
+    echo "Checking Gum installation..."
+    if command -v gum >/dev/null 2>&1; then
+        echo "✅ Gum is already installed."
+        return
+    fi
+
+    echo "Installing Gum..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if ! command -v brew >/dev/null 2>&1; then
+            echo "❌ Homebrew not found. Please install Homebrew first."
+            exit 1
+        fi
+        brew install gum || { echo "❌ Failed to install Gum."; exit 1; }
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt update && sudo apt install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
+        elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
+        else
+            echo "⚠️ Please install Gum manually from https://github.com/charmbracelet/gum."
+            exit 1
+        fi
+    else
+        echo "❌ Unsupported OS. Please install Gum manually from https://github.com/charmbracelet/gum."
+        exit 1
+    fi
+}
+
 
 ##############################################
 # Repository Setup

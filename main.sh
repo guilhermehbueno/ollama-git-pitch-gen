@@ -7,7 +7,7 @@
 MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
 HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
 MODEL_DIR="$HOME/models"  # Directory to store the model
-MODEL_PATH="git-assistant"  # Model alias for Ollama
+MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
@@ -313,6 +313,92 @@ update_pitch() {
     fi
 }
 
+commit() {
+    # Parse command-line arguments
+    local user_context=""
+    local additional_prompt=""
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            -m)
+                user_context="$2"
+                shift 2
+                ;;
+            -p)
+                additional_prompt="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    # Get the current staged changes
+    local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
+
+    if [[ -z "$diff_content" ]]; then
+        echo "❌ No staged changes found. Please stage files before committing."
+        exit 1
+    fi
+
+    local config_file=".git/hooks/prepare-commit-msg.properties"
+    local commit_prompt="Generate a concise and meaningful Git commit message for the following changes:"
+    local local_model=$MODEL_PATH
+    if [[ -f "$config_file" ]]; then
+        commit_prompt=$(grep "^OLLAMA_PROMPT=" "$config_file" | cut -d '=' -f2-)
+        local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+    fi
+
+    # Incorporate user context and additional prompt into AI request
+    if [[ -n "$user_context" ]]; then
+        commit_prompt="$commit_prompt\nUser context: $user_context"
+    fi
+    if [[ -n "$additional_prompt" ]]; then
+        commit_prompt="$commit_prompt\n$additional_prompt"
+    fi
+
+    echo "📨 Generating AI commit message suggestion..."
+    local suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a concise and meaningful Git commit message for the following changes: $diff_content Format output as: <commit message>")
+
+    if [[ -z "$suggested_message" ]]; then
+        echo "❌ Failed to generate commit message. Please type your own."
+        suggested_message=""
+    fi
+
+    # If user did not provide -m, ask if they want to clarify
+    local extra_context=""
+    while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; do
+        extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 10)
+        commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
+        
+        echo "📨 Refining AI commit message suggestion..."
+        suggested_message=$(ollama run "$local_model" "$commit_prompt. Generate a refined commit message based on the provided context and the following changes: $diff_content Format output as: <commit message>")
+        # Final user confirmation
+    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
+    done
+
+    # Final user confirmation
+    echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
+    if gum confirm "Would you like to proceed with this commit message?"; then
+        # Use Gum to allow user to make final edits
+        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 10)
+
+        # Ensure commit message is not empty
+        if [[ -z "$commit_message" ]]; then
+            echo "❌ Commit message cannot be empty."
+            exit 1
+        fi
+
+        # Commit with the final message
+        git commit -m "$commit_message"
+        echo "✅ Commit successful!"
+    else
+        echo "❌ Commit aborted."
+    fi
+}
+
+
+
 # ───────────────────────────────────────────────────────────
 # 🔹 SYSTEM INFO FUNCTION
 # ───────────────────────────────────────────────────────────
@@ -610,6 +696,9 @@ case "$1" in
         ;;
     apply)
         install_git_hook
+        ;;
+    commit)
+        commit
         ;;
     model)
         pitch_model
