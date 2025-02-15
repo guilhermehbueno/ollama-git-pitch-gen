@@ -368,7 +368,7 @@ commit() {
     # If user did not provide -m, ask if they want to clarify
     local extra_context=""
     while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; do
-        extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 10)
+        extra_context=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 40)
         commit_prompt="$commit_prompt\nAdditional user clarification: $extra_context"
         
         echo "📨 Refining AI commit message suggestion..."
@@ -381,7 +381,7 @@ commit() {
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     if gum confirm "Would you like to proceed with this commit message?"; then
         # Use Gum to allow user to make final edits
-        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 10)
+        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 40)
 
         # Ensure commit message is not empty
         if [[ -z "$commit_message" ]]; then
