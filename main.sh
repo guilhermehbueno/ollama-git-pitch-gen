@@ -1,9 +1,7 @@
 #!/bin/bash
-
 # ───────────────────────────────────────────────────────────
 # 🔹 GLOBAL VARIABLES
 # ───────────────────────────────────────────────────────────
-
 MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
 HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
 MODEL_DIR="$HOME/models"  # Directory to store the model
@@ -16,27 +14,53 @@ DISABLE_LOGS="true"
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
 # ───────────────────────────────────────────────────────────
-
 log() {
     if [[ "$DISABLE_LOGS" != "true" ]]; then
         gum log --level info "$1"
     fi
 }
-
 warn() {
     gum log --level warn "$1"
 }
-
 error() {
     gum log --level error "$1"
     exit 1
 }
 
+# ───────────────────────────────────────────────────────────
+# 🔹 PARSE ARGUMENTS FUNCTIONS
+# ───────────────────────────────────────────────────────────
+parse_arguments() {
+    local prev_key=""
+
+    for arg in "$@"; do
+        if [[ "$arg" == --* ]]; then
+            prev_key=""
+            value=""
+            if [[ "$arg" == *=* ]]; then
+                prev_key="${arg%%=*}"  # Extract key before '='
+                prev_key="${prev_key#--}"  # Remove '--' prefix
+                prev_key="${prev_key//-/_}"  # Convert dashes to underscores for valid variable names
+                prev_key=$(echo "$prev_key" | tr '[:lower:]' '[:upper:]')  # Convert to uppercase
+                value="${arg#*=}"  # Extract value after '='
+                log "Declaring: $prev_key=${value}"
+                eval "$prev_key"="$value"
+            else
+                prev_key="${arg#--}"  # Remove '--' prefix
+                prev_key="${prev_key//-/_}"  # Convert dashes to underscores
+                prev_key=$(echo "$prev_key" | tr '[:lower:]' '[:upper:]')  # Convert to uppercase
+                log "Declaring: $prev_key=true"
+                eval "$prev_key"=true
+            fi
+        fi
+    done
+}
+# Call the argument parser at the start of the script
+parse_arguments "$@"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 INSTALLATION FUNCTIONS
 # ───────────────────────────────────────────────────────────
-
 install_ollama() {
     log "Checking Ollama installation..."
     if command -v ollama >/dev/null 2>&1; then
@@ -566,7 +590,7 @@ Format output as:
     echo "$pr_body"
 
     # Check if GitHub CLI is installed and --text-only flag is NOT provided
-    if command -v gh >/dev/null 2>&1 && [[ "$text_only_flag" != "--text-only" ]]; then
+    if command -v gh >/dev/null 2>&1 && [[ "$TEXT_ONLY" != "true" ]]; then
         echo "🔗 Creating GitHub Pull Request..."
         gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
     else
