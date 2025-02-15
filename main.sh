@@ -397,7 +397,7 @@ commit() {
 
     local prompt_content=$(cat ".git/hooks/commit.prompt")
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
-    gum pager "$commit_prompt" --timeout=10s
+    gum pager "$commit_prompt" --timeout=5s
 
     echo "📨 Generating AI commit message suggestion..."
     local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
@@ -427,7 +427,7 @@ commit() {
             ### Previous Suggestion:
             $suggested_message
         "
-        gum pager "$commit_prompt" --timeout=10s
+        gum pager "$commit_prompt" --timeout=5s
 
         echo "📨 Refining AI commit message suggestion..."
         suggested_message=$(ollama run "$local_model" "$commit_prompt")
