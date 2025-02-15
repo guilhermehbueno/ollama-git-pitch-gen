@@ -9,19 +9,25 @@ MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
 SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
 CONFIG_FILE=".git/prepare-commit-msg.properties"
 INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
-DISABLE_LOGS="false"
+DISABLE_LOGS="true"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 HELPER FUNCTIONS
 # ───────────────────────────────────────────────────────────
 log() {
-    gum log --level info "$1"
+    if [[ "$DISABLE_LOGS" != "true" ]]; then
+        gum log --level info "$1"
+    fi
 }
 warn() {
-    gum log --level warn "$1"
+    if [[ "$DISABLE_LOGS" != "true" ]]; then
+        gum log --level warn "$1"
+    fi
 }
 error() {
-    gum log --level error "$1"
+    if [[ "$DISABLE_LOGS" != "true" ]]; then
+        gum log --level error "$1"
+    fi
     exit 1
 }
 
