@@ -80,6 +80,35 @@ ask() {
 # ───────────────────────────────────────────────────────────
 # 🔹 INSTALLATION FUNCTIONS
 # ───────────────────────────────────────────────────────────
+install_gum() {
+    log "Checking Gum installation..."
+    if command -v gum >/dev/null 2>&1; then
+        log "✅ Gum is already installed."
+        return
+    fi
+
+    log "Installing Gum..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if ! command -v brew >/dev/null 2>&1; then
+            log "❌ Homebrew not found. Please install Homebrew first."
+            exit 1
+        fi
+        brew install gum || { echo "❌ Failed to install Gum."; exit 1; }
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt update && sudo apt install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
+        elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
+        else
+            log "⚠️ Please install Gum manually from https://github.com/charmbracelet/gum."
+            exit 1
+        fi
+    else
+        log "❌ Unsupported OS. Please install Gum manually from https://github.com/charmbracelet/gum."
+        exit 1
+    fi
+}
+
 install_git_hook() {
     git_root=$(get_git_repo_root)
 
@@ -567,6 +596,8 @@ Examples:
 EOF
     exit 0
 }
+
+install_gum
 
 case "$1" in
     help|-h|--help)
