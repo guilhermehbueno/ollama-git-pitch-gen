@@ -5,6 +5,7 @@ source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/model.sh"
 source "$SCRIPT_DIR/lib/git.sh"
 source "$SCRIPT_DIR/lib/utils.sh"
+source "$SCRIPT_DIR/lib/openai.sh"
 
 # ───────────────────────────────────────────────────────────
 # 🔹 GLOBAL VARIABLES
@@ -27,45 +28,89 @@ ask() {
         user_input=$(gum input --placeholder "Ask something..." --width "$(tput cols)")
     fi
 
-    # Allow user to select models using gum checkbox
-    selected_models=$(ollama list | awk '{print $1}' | tail -n +2 | gum choose --no-limit)
+    local git_root=$(get_git_repo_root) # Needed for config file
+    local config_file_path="$git_root/.git/hooks/prepare-commit-msg.properties"
+    local available_models_for_selection=()
+    local configured_openai_model=""
+    local configured_openai_model_name_only=""
 
-    # Convert selected_models into an array (compatible with older Bash versions)
-    IFS=$'\n' read -rd '' -a selected_models <<< "$selected_models"
+    # Check for configured OpenAI model
+    if [[ -f "$config_file_path" ]]; then
+        configured_model_line=$(grep "^OLLAMA_MODEL=" "$config_file_path")
+        if [[ -n "$configured_model_line" ]]; then
+            local model_in_config=$(echo "$configured_model_line" | cut -d '=' -f2-)
+            if [[ "$model_in_config" == "openai/"* ]]; then
+                local api_key_line=$(grep "^OPENAI_API_KEY=" "$config_file_path")
+                if [[ -n "$api_key_line" && -n $(echo "$api_key_line" | cut -d '=' -f2-) ]]; then
+                    configured_openai_model_name_only=${model_in_config#openai/}
+                    if [[ -n "$configured_openai_model_name_only" && ! "$configured_openai_model_name_only" =~ ^\s*$ ]]; then
+                        configured_openai_model="OpenAI: $configured_openai_model_name_only (configured)"
+                        available_models_for_selection+=("$configured_openai_model")
+                    fi
+                fi
+            fi
+        fi
+    fi
+
+    # Add Ollama models to selection
+    local ollama_models_list=$(ollama list | awk '{print $1}' | tail -n +2)
+    while IFS= read -r line; do
+        if [[ -n "$line" ]]; then # Ensure line is not empty
+             available_models_for_selection+=("$line")
+        fi
+    done <<< "$ollama_models_list"
+    
+    if [[ ${#available_models_for_selection[@]} -eq 0 ]]; then
+        echo "❌ No models available (Ollama or configured OpenAI). Exiting..."
+        return 1
+    fi
+
+    # Allow user to select models using gum choose
+    local selected_model_strings=$(printf "%s\n" "${available_models_for_selection[@]}" | gum choose --no-limit --header "Select models to query:")
+
+    # Convert selected_models into an array
+    IFS=$'\n' read -rd '' -a selected_models_array <<< "$selected_model_strings"
 
     # Validate selection
-    if [[ ${#selected_models[@]} -eq 0 ]]; then
+    if [[ ${#selected_models_array[@]} -eq 0 ]]; then
         echo "❌ No models selected. Exiting..."
         return 1
     fi
 
     # Get terminal width and divide it by the number of selected models
-    total_width=$(tput cols)
-    model_count=${#selected_models[@]}
+    local total_width=$(tput cols)
+    local model_count=${#selected_models_array[@]}
     
-    # Prevent division by zero
-    if [[ "$model_count" -eq 0 ]]; then
+    if [[ "$model_count" -eq 0 ]]; then # Should be caught by above, but good practice
         echo "❌ No models selected. Exiting..."
         return 1
     fi
-    
-    box_width=$(( total_width / model_count - 4 ))  # Adjust width dynamically
+    local box_width=$(( total_width / model_count - 4 ))
 
     # Initialize arrays to store responses and boxes
-    responses=()  # Using indexed array instead of associative array
-    boxes=()
+    local responses=()
+    local boxes=()
 
     # Query each selected model
-    for model in "${selected_models[@]}"; do
-        response=$(ollama run "$model" "$user_input")
+    for model_display_name in "${selected_models_array[@]}"; do
+        local response
+        if [[ "$model_display_name" == "$configured_openai_model" && -n "$configured_openai_model_name_only" ]]; then
+            # This is the configured OpenAI model
+            echo "Querying OpenAI: $configured_openai_model_name_only..."
+            response=$(call_openai_api "$user_input" "$configured_openai_model_name_only")
+        else
+            # This is an Ollama model
+            echo "Querying Ollama: $model_display_name..."
+            response=$(ollama run "$model_display_name" "$user_input")
+        fi
         responses+=("$response")
     done
 
     # Create styled boxes for each response
-    index=0
-    for model in "${selected_models[@]}"; do
-        formatted_response=$(echo "**🤖 $model Response:** ${responses[$index]}" | gum format --theme=dark)
-        box=$(gum style --border double --width "$box_width" --align left --padding "1 2" "$formatted_response")
+    local index=0
+    for model_display_name in "${selected_models_array[@]}"; do
+        local formatted_response=$(echo "**🤖 $model_display_name Response:** ${responses[$index]}" | gum format --theme=dark)
+        local box=$(gum style --border double --width "$box_width" --align left --padding "1 2" "$formatted_response")
         boxes+=("$box")
         ((index++))
     done
@@ -304,10 +349,13 @@ commit() {
     local config_file=".git/hooks/prepare-commit-msg.properties"
     local local_model=$MODEL_PATH
     if [[ -f "$config_file" ]]; then
-        local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+        local_model_from_config=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+        if [[ -n "$local_model_from_config" ]]; then # Ensure it's not empty
+            local_model="$local_model_from_config"
+        fi
     fi
 
-    # Check if the model exists
+    # Check if the model exists (this function now handles both OpenAI and Ollama)
     check_model_exists "$local_model"
 
     local prompt_file=".git/hooks/commit.prompt"
@@ -321,7 +369,13 @@ commit() {
     gum pager "$commit_prompt" --timeout=5s
 
     echo "📨 Generating AI commit message suggestion..."
-    local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
+    local suggested_message
+    if [[ "$local_model" == "openai/"* ]]; then
+        local openai_model_name=${local_model#openai/}
+        suggested_message=$(call_openai_api "$commit_prompt. $diff_content Format output as: <commit message>" "$openai_model_name")
+    else
+        suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
+    fi
 
     if [[ -z "$suggested_message" ]]; then
         echo "❌ Failed to generate commit message. Please type your own."
@@ -351,7 +405,12 @@ commit() {
         gum pager "$commit_prompt" --timeout=5s
 
         echo "📨 Refining AI commit message suggestion..."
-        suggested_message=$(ollama run "$local_model" "$commit_prompt")
+        if [[ "$local_model" == "openai/"* ]]; then
+            local openai_model_name=${local_model#openai/}
+            suggested_message=$(call_openai_api "$commit_prompt" "$openai_model_name")
+        else
+            suggested_message=$(ollama run "$local_model" "$commit_prompt")
+        fi
 
         # Display refined commit message
         echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
@@ -399,10 +458,18 @@ generate_pr_markdown() {
 
     # Get the AI model from the properties file
     if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+        model_name_from_config=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+        if [[ -n "$model_name_from_config" ]]; then # Ensure it's not empty
+            model_name="$model_name_from_config"
+        else
+            model_name="pitch_default" # Default fallback if OLLAMA_MODEL is empty or not found
+        fi
     else
-        model_name="pitch_default"  # Default fallback model
+        model_name="pitch_default"  # Default fallback model if config file doesn't exist
     fi
+    
+    # Check if the model exists (this function now handles both OpenAI and Ollama)
+    check_model_exists "$model_name"
 
     echo "🤖 Using AI Model: $model_name"
 
@@ -444,9 +511,14 @@ generate_pr_markdown() {
         - [ ] Tests have been added/updated
         - [ ] Documentation is updated if needed
     "
-    pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    if [[ "$model_name" == "openai/"* ]]; then
+        local openai_model_name=${model_name#openai/}
+        pr_body=$(call_openai_api "$pr_body_prompt" "$openai_model_name")
+    else
+        pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    fi
 
-    # Get PR title from Ollama
+    # Get PR title
     echo "📨 Generating PR title..."
     local pr_title_prompt="
     ### Instruction:
@@ -458,7 +530,12 @@ generate_pr_markdown() {
      - description: $pr_body
 
     Respond with only the PR title."
-    pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+    if [[ "$model_name" == "openai/"* ]]; then
+        local openai_model_name=${model_name#openai/}
+        pr_title=$(call_openai_api "$pr_title_prompt" "$openai_model_name")
+    else
+        pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+    fi
 
     # Format the PR message using gum
     formatted_pr=$(echo -e "# $pr_title\n\n$pr_body" | gum format --theme=dark)
@@ -491,10 +568,22 @@ generate_readme() {
 
     # Get the AI model from the properties file
     if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
+        model_name_from_config=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+        if [[ -n "$model_name_from_config" ]]; then
+            model_name="$model_name_from_config"
+        else
+            model_name="pitch_readme_generator" # Default fallback
+        fi
     else
         model_name="pitch_readme_generator"  # Default fallback model
     fi
+
+    # Check if the model exists (this function now handles both OpenAI and Ollama)
+    # Potentially add check_model_exists "$model_name" here if desired,
+    # though generate_readme has its own ollama run calls that would fail.
+    # For consistency, it might be good to add:
+    check_model_exists "$model_name"
+
     # Check for ignore pattern in arguments
     for arg in "$@"; do
         if [[ "$arg" == --ignore=* ]]; then
@@ -516,7 +605,8 @@ generate_readme() {
     for file in $project_files; do
         echo "🔍 Processing $file..."
         file_content=$(cat "$file")
-        file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
+        local file_summary
+        local prompt_text="Analyze the following file and extract:
 - A concise summary of its purpose.
 - A list of defined functions, including their names and arguments.
 - Any key configurations or settings.
@@ -533,13 +623,19 @@ FUNCTIONS:
 
 CONFIGURATIONS:
 - Key1: Value1
-- Key2: Value2")
+- Key2: Value2"
 
+        if [[ "$model_name" == "openai/"* ]]; then
+            local openai_model_name=${model_name#openai/}
+            file_summary=$(call_openai_api "$prompt_text\n\nFile: $file\nContent:\n$file_content" "$openai_model_name")
+        else
+            file_summary=$(ollama run "$model_name" "$prompt_text\n\nFile: $file\nContent:\n$file_content")
+        fi
         aggregated_summary+="$file_summary\n\n"
     done
 
-    echo "📨 Sending aggregated summaries to Ollama for README generation..."
-    readme_content=$(ollama run "$model_name" "Generate a comprehensive README.md file based on the following project summaries:
+    echo "📨 Sending aggregated summaries to AI for README generation..."
+    local readme_prompt="Generate a comprehensive README.md file based on the following project summaries:
 
 $aggregated_summary
 
@@ -549,7 +645,14 @@ Guidelines:
 - Provide installation and usage instructions.
 - Format everything strictly in Markdown.
 
-Output the README.md content only, without additional explanations.")
+Output the README.md content only, without additional explanations."
+
+    if [[ "$model_name" == "openai/"* ]]; then
+        local openai_model_name=${model_name#openai/}
+        readme_content=$(call_openai_api "$readme_prompt" "$openai_model_name")
+    else
+        readme_content=$(ollama run "$model_name" "$readme_prompt")
+    fi
 
     if [[ -z "$readme_content" ]]; then
         echo "❌ Failed to generate README."

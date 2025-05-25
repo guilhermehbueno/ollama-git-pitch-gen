@@ -5,11 +5,28 @@
 
 check_model_exists() {
     local model_name="$1"
-    if ! ollama list | grep -q "$model_name"; then
-        echo "❌ Model '$model_name' not found. Please run 'pitch model' to select a valid model."
+    local git_root=$(get_git_repo_root)
+    local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
+
+    if [[ "$model_name" == "openai/"* ]]; then
+        # Check if model name is just "openai/" or "openai/ "
+        if [[ "$model_name" == "openai/" || "$model_name" =~ ^openai/\s*$ ]]; then
+            echo "❌ OpenAI model name is missing. Please run 'pitch model' to select a valid OpenAI model."
+            exit 1
+        fi
+        if ! grep -q "^OPENAI_API_KEY=" "$config_file" || [[ -z $(grep "^OPENAI_API_KEY=" "$config_file" | cut -d'=' -f2-) ]]; then
+            echo "❌ OpenAI API key not found or not set. Please run 'pitch model' to configure it."
+            exit 1
+        fi
+        log "✅ OpenAI model and API key configured."
+    elif ! ollama list | grep -q "$model_name"; then
+        echo "❌ Ollama model '$model_name' not found. Please run 'pitch model' to select a valid model or ensure Ollama is running."
         exit 1
+    else
+        log "✅ Ollama model '$model_name' found."
     fi
 }
+
 create_model() {
     local model_name="$1"
     local model_file="$INSTALL_DIR/Modelfile.sample"
@@ -72,9 +89,7 @@ uninstall() {
 pitch_model() {
     # Ensure we're inside a Git repository
     git_root=$(get_git_repo_root)
-
     local config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
-    local temp_file="$config_file.tmp"
 
     # Ensure the config file exists
     if [[ ! -f "$config_file" ]]; then
@@ -82,50 +97,74 @@ pitch_model() {
         touch "$config_file"
     fi
 
-    echo "📦 Available Models in Ollama:"
-    
-    # Get a list of models
-    local models=($(ollama list | grep pitch | awk '{print $1}'))
-    
-    if [[ ${#models[@]} -eq 0 ]]; then
-        echo "❌ No models found in Ollama. Please add models first."
+    echo "🤖 Choose your AI provider:"
+    local provider=$(gum choose "Ollama" "OpenAI" --header "Select AI provider:")
+
+    if [[ "$provider" == "OpenAI" ]]; then
+        local openai_model_name=$(gum input --placeholder "Enter OpenAI model name (e.g., gpt-4)")
+        if [[ -z "$openai_model_name" ]]; then
+            echo "❌ OpenAI model name cannot be empty."
+            exit 1
+        fi
+        local openai_api_key=$(gum input --password --placeholder "Enter your OpenAI API Key")
+        if [[ -z "$openai_api_key" ]]; then
+            echo "❌ OpenAI API Key cannot be empty."
+            exit 1
+        fi
+
+        local model_to_save="openai/$openai_model_name"
+
+        # Update OLLAMA_MODEL in config file
+        if grep -q "^OLLAMA_MODEL=" "$config_file"; then
+            sed -i.bak "s|^OLLAMA_MODEL=.*|OLLAMA_MODEL=$model_to_save|" "$config_file"
+        else
+            echo "OLLAMA_MODEL=$model_to_save" >> "$config_file"
+        fi
+
+        # Update OPENAI_API_KEY in config file
+        if grep -q "^OPENAI_API_KEY=" "$config_file"; then
+            sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$openai_api_key|" "$config_file"
+        else
+            echo "OPENAI_API_KEY=$openai_api_key" >> "$config_file"
+        fi
+        rm -f "$config_file.bak" # Remove backup file created by sed
+
+        echo "✅ Configured to use OpenAI model: $model_to_save"
+        echo "✅ OpenAI API Key stored in $config_file"
+
+    elif [[ "$provider" == "Ollama" ]]; then
+        echo "📦 Available Models in Ollama:"
+        local models=($(ollama list | grep pitch | awk '{print $1}'))
+        
+        if [[ ${#models[@]} -eq 0 ]]; then
+            echo "❌ No 'pitch_' prefixed models found in Ollama. Please add models using 'ollama create ... -f Modelfile.sample' or ensure they have the 'pitch_' prefix."
+            exit 1
+        fi
+
+        local selected_model=$(printf "%s\n" "${models[@]}" | gum choose --header "Select an Ollama model:" --cursor "➜")
+        if [[ -z "$selected_model" ]]; then
+            echo "❌ No model selected."
+            exit 1
+        fi
+        echo "✅ Selected Ollama model: $selected_model"
+
+        # Update OLLAMA_MODEL in config file
+        if grep -q "^OLLAMA_MODEL=" "$config_file"; then
+            sed -i.bak "s|^OLLAMA_MODEL=.*|OLLAMA_MODEL=$selected_model|" "$config_file"
+        else
+            echo "OLLAMA_MODEL=$selected_model" >> "$config_file"
+        fi
+        # Remove OPENAI_API_KEY if it exists, as we are using Ollama
+        if grep -q "^OPENAI_API_KEY=" "$config_file"; then
+            sed -i.bak "/^OPENAI_API_KEY=/d" "$config_file"
+        fi
+        rm -f "$config_file.bak" # Remove backup file created by sed
+
+        echo "✅ Updated $config_file with OLLAMA_MODEL=$selected_model"
+    else
+        echo "❌ Invalid provider selected."
         exit 1
     fi
-
-    # Use gum choose to select a model
-    local selected_model=$(printf "%s\n" "${models[@]}" | gum choose --header "Select an AI model:" --cursor "➜")
-    echo "✅ Selected model: $selected_model"
-
-    # Read the file line by line, replace OLLAMA_MODEL if found
-    local updated_lines=()
-    local found=0
-
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^OLLAMA_MODEL= ]]; then
-            updated_lines+=("OLLAMA_MODEL=$selected_model")
-            found=1
-        else
-            updated_lines+=("$line")
-        fi
-    done < "$config_file"
-
-    # If OLLAMA_MODEL was not found, add it at the end
-    if [[ "$found" -eq 0 ]]; then
-        updated_lines+=("OLLAMA_MODEL=$selected_model")
-    fi
-
-    # Debug: Print final array before writing to the file
-    echo "DEBUG: Final updated_lines content:"
-    printf "%s\n" "${updated_lines[@]}"
-
-    # Now log the correct updated lines
-    log "$config_file"
-    log "${updated_lines[@]}"
-
-    # Write back to the properties file
-    printf "%s\n" "${updated_lines[@]}" > "$config_file"
-
-    echo "✅ Updated $config_file with OLLAMA_MODEL=$selected_model"
 }
 
 
