@@ -294,7 +294,7 @@ commit() {
 
     get_git_repo_root
 
-    local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
+    local diff_content=$(git diff --cached --unified=3 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
         echo "❌ No staged changes found. Please stage files before committing."

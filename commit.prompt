@@ -1,28 +1,52 @@
 ### Instruction:
-- Respond only with the commit message.
-- Do not include an introduction, explanation, or commentary.
-- The message must be clear, concise, and follow best practices.
+- Respond **only** with the commit message.
+- Do **not** include an introduction, explanation, or commentary.
+- The message must be **clear, concise, and follow best practices**.
 
 ### Task:
 Generate a **concise and meaningful Git commit message** summarizing the following changes.
 
 ### Context:
-- The commit message should be in an **imperative tone** (e.g., "Fix bug in login").
+- The commit message should use an **imperative tone** (e.g., "Fix bug in login").
 - Do **not** include phrases like "This commit" or "Here is your message".
-- Keep it **under 72 characters** to follow conventional commit message guidelines.
+- Keep it **under 72 characters** for the subject line (if more details are needed, break them into a body section).
+- Follow **Git commit best practices** (e.g., Conventional Commits).
+- Identify **whether changes are additions, deletions, or modifications**, and reflect this in the message.
 
 ---
 
-### User Clarification:
+### **Change Classification:**
+- If code **was added**, use **"Add", "Introduce", or "Implement"**.
+- If code **was removed**, use **"Remove", "Delete", or "Deprecate"**.
+- If code **was modified**, use **"Update", "Refactor", or "Fix"**.
+- If a **config file changed**, mention the key settings updated.
+
+---
+
+### **User Clarification:**
 If the user has provided additional context, integrate it meaningfully into the commit message.
+
 <USER_CONTEXT>
 
 ---
 
-### Diff:
+### **Diff Analysis Guidelines:**
+- **Highlight Additions**: Identify new code, functions, or features.
+- **Highlight Deletions**: Explicitly recognize removed functionality.
+- **Summarize Significant Changes**: If the diff is large, prioritize key changes.
+- **Categorize the Change**: Use the appropriate Conventional Commit prefix:
+  - **feat:** for new features
+  - **fix:** for bug fixes
+  - **chore:** for non-functional updates
+  - **refactor:** for code restructuring
+  - **docs:** for documentation updates
+
+---
+
+### **Diff:**
 <DIFF_CONTENT>
 
 ---
 
-### Format:
+### **Format:**
 <commit message>
