@@ -1,6 +1,11 @@
 #!/bin/bash
 
-SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
+if [[ "$DEV_MODE" == "true" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
+fi
+
 source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/model.sh"
 source "$SCRIPT_DIR/lib/git.sh"

@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Ensure lib/utils.sh and lib/git.sh are sourced if their functions are needed
-# SCRIPT_DIR="$HOME/.ollama-git-pitch-gen" # Or determine dynamically
-# source "$SCRIPT_DIR/lib/utils.sh" # For log_error or other utils if you add them
-# source "$SCRIPT_DIR/lib/git.sh" # For get_git_repo_root
-
 call_openai_api() {
     local prompt_content="$1"
     local openai_model_name="$2"
@@ -47,6 +42,8 @@ call_openai_api() {
         "messages": [{"role": "user", "content": "%s"}]
     }' "$openai_model_name" "$escaped_prompt_content")
 
+    # echo "Payload: $json_payload"
+
     # Make API call
     # -s for silent, -w to write out http_code, timeout for safety
     response_data=$(curl --connect-timeout 15 --max-time 60 -s -w "\n%{http_code}" https://api.openai.com/v1/chat/completions \
@@ -56,6 +53,8 @@ call_openai_api() {
 
     http_code=$(echo "$response_data" | tail -n1)
     response_body=$(echo "$response_data" | sed '$d')
+
+    echo "Response: $response_body"
 
     if [[ "$http_code" -ne 200 ]]; then
         echo "Error: OpenAI API request failed with status code $http_code." >&2
@@ -88,48 +87,3 @@ call_openai_api() {
 
     echo "$assistant_response"
 }
-
-# Example usage (for testing purposes, comment out or remove in production):
-# test_openai_call() {
-#   echo "Testing OpenAI API call..."
-#   # Ensure you have a .git/hooks/prepare-commit-msg.properties with OPENAI_API_KEY set
-#   # And that get_git_repo_root is available.
-#   # This requires lib/git.sh to be in the same directory or sourced.
-#   # If lib/git.sh is in ../lib relative to this script:
-#   # source "$(dirname "$0")/../lib/git.sh" # Adjust path as necessary
-#
-#   local test_prompt="Translate 'hello world' to French."
-#   local test_model="gpt-3.5-turbo" # Or any other model you have access to
-#   
-#   echo "Prompt: $test_prompt"
-#   echo "Model: $test_model"
-#   
-#   # Create a dummy properties file for testing if needed
-#   # local git_root_test=$(get_git_repo_root)
-#   # local config_file_test="$git_root_test/.git/hooks/prepare-commit-msg.properties"
-#   # if [ ! -f "$config_file_test" ]; then
-#   #   mkdir -p "$(dirname "$config_file_test")"
-#   #   echo "OPENAI_API_KEY=your_dummy_or_real_key_for_testing" > "$config_file_test"
-#   #   echo "OLLAMA_MODEL=openai/$test_model" >> "$config_file_test"
-#   # fi
-#
-#   response=$(call_openai_api "$test_prompt" "$test_model")
-#   exit_code=$?
-#
-#   if [[ $exit_code -eq 0 ]]; then
-#       echo "OpenAI Response: $response"
-#   else
-#       echo "OpenAI API call failed with exit code $exit_code."
-#       # The error message would have been printed by call_openai_api itself.
-#   fi
-# }
-#
-# If you want to run the test:
-# Ensure lib/git.sh is available. You might need to adjust the source line in test_openai_call or source it before calling.
-# For example, if lib/git.sh is one directory up:
-# if [ -f "$(dirname "$0")/../lib/git.sh" ]; then
-#    source "$(dirname "$0")/../lib/git.sh"
-#    test_openai_call
-# else
-#    echo "lib/git.sh not found, skipping test_openai_call"
-# fi
