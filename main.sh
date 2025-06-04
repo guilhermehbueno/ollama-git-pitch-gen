@@ -24,6 +24,97 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config_manager.sh" # New
 source "$SCRIPT_DIR/lib/ai_providers.sh"   # New
 
+install_gum() {
+    log "Checking Gum installation..."
+    if command_exists gum; then
+        log "✅ Gum is already installed."
+        return
+    fi
+
+    log "Installing Gum..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if ! command_exists brew; then
+            error "❌ Homebrew not found. Please install Homebrew first to install Gum." # error will exit
+        fi
+        if brew install gum; then
+            log "✅ Gum installed successfully via Homebrew."
+        else
+            error "❌ Failed to install Gum using Homebrew." # error will exit
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command_exists apt; then
+            if sudo apt update && sudo apt install -y gum; then
+                log "✅ Gum installed successfully via apt."
+            else
+                error "❌ Failed to install Gum using apt." # error will exit
+            fi
+        elif command_exists yum; then
+            if sudo yum install -y gum; then
+                log "✅ Gum installed successfully via yum."
+            else
+                error "❌ Failed to install Gum using yum." # error will exit
+            fi
+        else
+            warn "⚠️ apt or yum not found. Please install Gum manually from https://github.com/charmbracelet/gum."
+            error "Gum installation required to proceed." # error will exit
+        fi
+    else
+        warn "❌ Unsupported OS for automatic Gum installation."
+        error "Please install Gum manually from https://github.com/charmbracelet/gum and try again." # error will exit
+    fi
+}
+
+info() {
+    # This function should ideally source version info if available, e.g. from a VERSION file
+    local version="N/A (dev)"
+    if [[ -f "$SCRIPT_DIR/VERSION" ]]; then
+        version=$(cat "$SCRIPT_DIR/VERSION")
+    fi
+
+    log "Ollama Git Pitch Generator (pitch) Information:"
+    gum table --widths=20,0 << EOF
+"Property", "Value"
+"Version", "$version"
+"Installation Directory", "$INSTALL_DIR"
+"Default Global Config", "$DEFAULT_CONFIG_FILE"
+"Active Project Config", "$(get_active_config_file)"
+"Primary AI Provider", "$(get_config_value "$(get_active_config_file)" "AI_PROVIDER" "Not Set")"
+"Fallback Providers", "$(get_config_value "$(get_active_config_file)" "FALLBACK_PROVIDERS" "None")"
+EOF
+
+    # Display more detailed provider status using the existing function
+    show_provider_status
+}
+
+show_help() {
+    gum style --padding "1 2" --border double --border-foreground 212 "Ollama Git Pitch Generator (pitch) - Help"
+    echo ""
+    gum table << EOF
+"Command", "Description", "Options"
+"help, -h, --help", "Show this help message", ""
+"install", "Run internal setup (Ollama, default models, API key guidance)", ""
+"uninstall", "Remove Ollama models, pitch command, and related files", ""
+"apply", "Install Git hook for automatic commit messages in current repo", ""
+"model", "Interactively select AI provider and model for the current project", ""
+"providers", "Show status of configured AI providers and models", ""
+"setup-keys", "Interactively set up API keys for OpenAI and Claude", ""
+"test-connection [provider]", "Test connection to a specific AI provider (e.g., ollama, openai, claude)", ""
+"commit", "Generate AI commit message for staged changes", "[-p \"context\"]"
+"pr <base_branch>", "Generate PR title and description", "[--text-only]"
+"ask [\text\"]", "Ask a question about your codebase", ""
+"readme", "Generate a draft README.md for your project", "[--ignore \"patterns\"]"
+"update", "Update pitch to the latest version", ""
+"start", "(Ollama) Start the Ollama server", ""
+"stop", "(Ollama) Stop the Ollama server", ""
+"create_model <base_model>", "(Ollama) Create a new pitch_* model from a base Ollama model", ""
+"delete_models", "(Ollama) DANGEROUS! Remove ALL local Ollama models and data", ""
+"remove_pitch_models", "(Ollama) Remove all 'pitch_*' prefixed Ollama models", ""
+EOF
+    echo ""
+    log "For more details, see the README.md or visit the GitHub repository."
+    exit 0
+}
+
 # ───────────────────────────────────────────────────────────
 # 🔹 GLOBAL VARIABLES
 # ───────────────────────────────────────────────────────────
@@ -40,7 +131,7 @@ DEFAULT_CONFIG_FILE="$INSTALL_DIR/prepare-commit-msg.properties" # Global/defaul
 get_active_config_file() {
     local git_root_val
     git_root_val=$(get_git_repo_root) # This function should handle being outside a repo gracefully
-    
+
     if [[ -n "$git_root_val" && -d "$git_root_val/.git" ]]; then
         local project_config_file="$git_root_val/.git/hooks/prepare-commit-msg.properties"
         if [[ -f "$project_config_file" ]]; then
@@ -50,7 +141,7 @@ get_active_config_file() {
         # If no project config, consider creating one or using global.
         # For now, fallback to global if no project config.
     fi
-    
+
     # Fallback to global/default config file in installation directory
     # Ensure it's created if it doesn't exist
     if [[ ! -f "$DEFAULT_CONFIG_FILE" ]]; then
