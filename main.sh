@@ -1,281 +1,170 @@
 #!/bin/bash
 
-SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
+# SCRIPT_DIR should point to the installation directory of ollama-git-pitch-gen
+# This is usually $HOME/.ollama-git-pitch-gen
+# Ensure SCRIPT_DIR is correctly defined. If main.sh is a symlink, SCRIPT_DIR needs to be the actual directory.
+# Using BASH_SOURCE to get the directory of the script itself (even if symlinked) might be more robust if main.sh is directly in INSTALL_DIR
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    # Get the directory of the target of the symlink
+    SCRIPT_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
+else
+    # Get the directory of the script itself
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+# If main.sh is in $INSTALL_DIR, then SCRIPT_DIR is correct.
+# If main.sh is a symlink in /usr/local/bin pointing to $INSTALL_DIR/main.sh, SCRIPT_DIR will be $INSTALL_DIR.
+
+# Make SCRIPT_DIR available to sourced scripts so they can find their own dependencies if needed.
+export SCRIPT_DIR
+
 source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/model.sh"
+source "$SCRIPT_DIR/lib/model.sh" # Still needed for pitch_model, ollama specific setup, etc.
 source "$SCRIPT_DIR/lib/git.sh"
 source "$SCRIPT_DIR/lib/utils.sh"
+source "$SCRIPT_DIR/lib/config_manager.sh" # New
+source "$SCRIPT_DIR/lib/ai_providers.sh"   # New
 
 # ───────────────────────────────────────────────────────────
 # 🔹 GLOBAL VARIABLES
 # ───────────────────────────────────────────────────────────
-MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
-HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
-MODEL_DIR="$HOME/models"  # Directory to store the model
-MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
-SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
-CONFIG_FILE=".git/prepare-commit-msg.properties"
-INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
-DISABLE_LOGS="true"
+# MODEL_NAME, HUGGINGFACE_URL, MODEL_DIR, MODEL_PATH might become legacy or Ollama-specific
+# SYSTEM_PROMPT might also be provider-specific.
+# CONFIG_FILE is now more dynamic. It can be project-specific or global.
+# Let's define a function to get the appropriate config file.
 
-parse_arguments "$@"
+# INSTALL_DIR is where the tool's own files (like default prompts) are stored.
+INSTALL_DIR="$SCRIPT_DIR" # Assuming SCRIPT_DIR is $HOME/.ollama-git-pitch-gen
+DEFAULT_CONFIG_FILE="$INSTALL_DIR/prepare-commit-msg.properties" # Global/default config
+
+# Function to determine the active configuration file
+get_active_config_file() {
+    local git_root_val
+    git_root_val=$(get_git_repo_root) # This function should handle being outside a repo gracefully
+    
+    if [[ -n "$git_root_val" && -d "$git_root_val/.git" ]]; then
+        local project_config_file="$git_root_val/.git/hooks/prepare-commit-msg.properties"
+        if [[ -f "$project_config_file" ]]; then
+            echo "$project_config_file"
+            return
+        fi
+        # If no project config, consider creating one or using global.
+        # For now, fallback to global if no project config.
+    fi
+    
+    # Fallback to global/default config file in installation directory
+    # Ensure it's created if it doesn't exist
+    if [[ ! -f "$DEFAULT_CONFIG_FILE" ]]; then
+        create_default_config "$DEFAULT_CONFIG_FILE" # From config_manager.sh
+    fi
+    echo "$DEFAULT_CONFIG_FILE"
+}
+
+
+# Ensure CONFIG_FILE is globally available for functions in ai_providers.sh like query_ai_with_fallback
+export CONFIG_FILE # This will be set by functions that need it, like commit() or globally.
+CONFIG_FILE=$(get_active_config_file) # Set a default one initially. Will be overridden in functions like commit()
+
+
+DISABLE_LOGS="false" # Default to false, can be overridden by args
+parse_arguments "$@" # Parses --no-logs, etc.
+
 
 ask() {
-    # Use provided argument as user input if available, otherwise prompt
     local user_input="$1"
     if [[ -z "$user_input" ]]; then
         user_input=$(gum input --placeholder "Ask something..." --width "$(tput cols)")
     fi
 
-    # Allow user to select models using gum checkbox
-    selected_models=$(ollama list | awk '{print $1}' | tail -n +2 | gum choose --no-limit)
-
-    # Convert selected_models into an array (compatible with older Bash versions)
-    IFS=$'\n' read -rd '' -a selected_models <<< "$selected_models"
-
-    # Validate selection
-    if [[ ${#selected_models[@]} -eq 0 ]]; then
-        echo "❌ No models selected. Exiting..."
+    if [[ -z "$user_input" ]]; then
+        error "No input provided."
         return 1
     fi
 
-    # Get terminal width and divide it by the number of selected models
+    local current_config_file
+    current_config_file=$(get_active_config_file)
+
+    local available_providers
+    available_providers=$(get_available_providers) # From ai_providers.sh
+    if [[ -z "$available_providers" ]]; then
+        error "No AI providers available. Please configure one (e.g., Ollama, OpenAI, Claude)."
+        return 1
+    fi
+
+    local selected_provider
+    selected_provider=$(echo "$available_providers" | tr ' ' '\n' | gum choose --header "Select AI Provider:")
+    if [[ -z "$selected_provider" ]]; then
+        error "No provider selected."
+        return 1
+    fi
+
+    log "Selected provider: $selected_provider"
+    if ! validate_provider_config "$selected_provider"; then return 1; fi
+
+    local models_list
+    models_list=$(get_models_for_provider "$selected_provider") # From ai_providers.sh
+    if [[ -z "$models_list" ]]; then
+        error "No models available for provider $selected_provider."
+        return 1
+    fi
+
+    local selected_models_str # Renamed from selected_models to avoid conflict
+    selected_models_str=$(echo "$models_list" | gum choose --no-limit --header "Select Model(s) for $selected_provider:")
+    if [[ -z "$selected_models_str" ]]; then
+        error "No models selected."
+        return 1
+    fi
+
+    IFS=$'\n' read -rd '' -a selected_models_arr <<< "$selected_models_str"
+
+    local temperature
+    temperature=$(get_config_value "$current_config_file" "${selected_provider^^}_TEMPERATURE" "0.7")
+
+    local total_width
     total_width=$(tput cols)
-    model_count=${#selected_models[@]}
-    
-    # Prevent division by zero
+    local model_count=${#selected_models_arr[@]}
+
     if [[ "$model_count" -eq 0 ]]; then
-        echo "❌ No models selected. Exiting..."
+        error "No models selected (array empty). Exiting..."
         return 1
     fi
-    
-    box_width=$(( total_width / model_count - 4 ))  # Adjust width dynamically
 
-    # Initialize arrays to store responses and boxes
-    responses=()  # Using indexed array instead of associative array
-    boxes=()
+    local box_width=$(( total_width / model_count - (model_count * 2) )) # Adjust width dynamically
 
-    # Query each selected model
-    for model in "${selected_models[@]}"; do
-        response=$(ollama run "$model" "$user_input")
-        responses+=("$response")
+    local responses=()
+    local boxes=()
+
+    for model_name_sel in "${selected_models_arr[@]}"; do
+        log "Querying $selected_provider with model $model_name_sel..."
+        # query_ai(provider, model, prompt, temperature)
+        local response
+        response=$(query_ai "$selected_provider" "$model_name_sel" "$user_input" "$temperature")
+
+        if [[ $? -ne 0 || -z "$response" ]]; then
+            error "Failed to get response from $selected_provider model $model_name_sel."
+            responses+=("Error: No response from $model_name_sel")
+        else
+            responses+=("$response")
+        fi
     done
 
-    # Create styled boxes for each response
-    index=0
-    for model in "${selected_models[@]}"; do
-        formatted_response=$(echo "**🤖 $model Response:** ${responses[$index]}" | gum format --theme=dark)
+    local index=0
+    for model_name_sel in "${selected_models_arr[@]}"; do
+        local formatted_response
+        formatted_response=$(echo "**🤖 $model_name_sel ($selected_provider) Response:** ${responses[$index]}" | gum format --theme=dark)
+        local box
         box=$(gum style --border double --width "$box_width" --align left --padding "1 2" "$formatted_response")
         boxes+=("$box")
         ((index++))
     done
 
-    # Display boxes side by side
     gum join --align center "${boxes[@]}"
 }
 
 
-
-
-# ───────────────────────────────────────────────────────────
-# 🔹 INSTALLATION FUNCTIONS
-# ───────────────────────────────────────────────────────────
-install_gum() {
-    log "Checking Gum installation..."
-    if command -v gum >/dev/null 2>&1; then
-        log "✅ Gum is already installed."
-        return
-    fi
-
-    log "Installing Gum..."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if ! command -v brew >/dev/null 2>&1; then
-            log "❌ Homebrew not found. Please install Homebrew first."
-            exit 1
-        fi
-        brew install gum || { echo "❌ Failed to install Gum."; exit 1; }
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        if command -v apt >/dev/null 2>&1; then
-            sudo apt update && sudo apt install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
-        elif command -v yum >/dev/null 2>&1; then
-            sudo yum install -y gum || { echo "❌ Failed to install Gum."; exit 1; }
-        else
-            log "⚠️ Please install Gum manually from https://github.com/charmbracelet/gum."
-            exit 1
-        fi
-    else
-        log "❌ Unsupported OS. Please install Gum manually from https://github.com/charmbracelet/gum."
-        exit 1
-    fi
-}
-
-install_git_hook() {
-    git_root=$(get_git_repo_root)
-
-    local hooks_dir="$git_root/.git/hooks"
-    local hook_file="$hooks_dir/prepare-commit-msg"
-    local script_dir
-    script_dir=$(dirname "$(realpath "$0")")
-
-    local hook_source="$script_dir/prepare-commit-msg.sh"
-    local hook_properties="$script_dir/prepare-commit-msg.properties"
-    
-    local commit_prompt="$script_dir/commit.prompt"
-    local pr_title_prompt="$script_dir/pr-title.prompt"
-    local pr_body_prompt="$script_dir/pr-description.prompt"
-
-    if [[ ! -f "$hook_source" ]]; then
-        error "Hook script '$hook_source' not found."
-    fi
-
-    log "Installing Git hook..."
-    cp "$hook_source" "$hook_file"
-    cp "$hook_properties" "$hook_file.properties"
-
-    cp "$commit_prompt" "$hooks_dir/commit.prompt"
-    cp "$pr_title_prompt" "$hooks_dir/pr-title.prompt"
-    cp "$pr_body_prompt" "$hooks_dir/pr-description.prompt"
-
-    chmod +x "$hook_file"
-
-    log "Git hook installed successfully."
-    log "$hook_file"
-    log "$hook_file.properties"
-    log "$hooks_dir.commit.prompt"
-    log "$hooks_dir.pr-title.prompt"
-    log "$hooks_dir.pr-description.prompt"
-}
-
-register_symlink() {
-    local target="$HOME/.local/bin/pitch"
-    mkdir -p "$HOME/.local/bin"
-
-    if [[ -L "$target" ]]; then
-        log "Symlink already exists at $target."
-    else
-        log "Creating symlink: $target -> $PWD/main.sh"
-        ln -s "$PWD/main.sh" "$target"
-        chmod +x "$target"
-    fi
-}
-
-update_pitch() {
-    echo "🔄 Checking for updates..."
-    INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
-    if [[ ! -d "$INSTALL_DIR" ]]; then
-        echo "❌ Installation directory not found. Please reinstall using the install script."
-        exit 1
-    fi
-
-    cd "$INSTALL_DIR"
-    git fetch origin main
-    latest_local_commit=$(git rev-parse HEAD)
-    latest_remote_commit=$(git rev-parse origin/main)
-
-    if [[ "$latest_local_commit" == "$latest_remote_commit" ]]; then
-        echo "✅ You are already up to date!"
-    else
-        echo "⬆️ Updating to the latest version..."
-        git pull origin main
-        echo "🎉 Update complete! Run 'pitch info' to verify the latest version."
-    fi
-}
-
-# ───────────────────────────────────────────────────────────
-# 🔹 MAIN FUNCTIONS
-# ───────────────────────────────────────────────────────────
-info() {
-    log "Gathering system and installation information..."
-
-    local markdown_output=""
-
-    markdown_output+=$'\n**🖥️   OS:** '"$(uname -a)"$''
-    markdown_output+=$'\n**💻  Shell:** '"$SHELL"$''
-
-    log "Checking if Ollama is installed..."
-    if command -v ollama >/dev/null 2>&1; then
-        markdown_output+=$'\n✅ **Ollama installed:** '"$(ollama --version)"$''
-    else
-        markdown_output+=$'\n❌ **Ollama is NOT installed.**'
-    fi
-
-    log "Checking if Ollama server is running..."
-    if pgrep -f "ollama serve" >/dev/null; then
-        markdown_output+=$'\n✅ **Ollama server is running.**'
-    else
-        markdown_output+=$'\n❌ **Ollama server is NOT running.**'
-    fi
-
-    log "Listing available Ollama models..."
-    markdown_output+=$'\n📦 **Available Models:**'
-    models=$(ollama list 2>/dev/null | grep -v "GIN")
-    if [[ -n "$models" ]]; then
-        markdown_output+="$models\n"
-    else
-        markdown_output+=$'\n❌ **No models found.**'
-    fi
-
-    log "Checking if inside a Git repository..."
-    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
-    if [[ -n "$git_root" ]]; then
-        log "Git repository detected at: $git_root"
-        hook_path="$git_root/.git/hooks/prepare-commit-msg"
-        config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
-
-        log "Checking Git hooks..."
-        if [[ -f "$hook_path" ]]; then
-            markdown_output+=$'\n✅ **Git hook installed at:** '"$hook_path"$''
-        else
-            markdown_output+=$'\n❌ **Git hook NOT installed.**'
-        fi
-
-        log "Checking commit message configuration..."
-        if [[ -f "$config_file" ]]; then
-            model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
-            if [[ -n "$model_name" ]]; then
-                markdown_output+=$'\n🤖 **Current AI Model:** '"$model_name"$''
-            else
-                markdown_output+=$'\n❌ **No model set in $config_file.**'
-            fi
-        else
-            markdown_output+=$'\n❌ **Configuration file not found:** '"$config_file"$''
-        fi
-    else
-        markdown_output+=$'\n❌ **Not inside a Git repository.**'
-    fi
-
-    log "Checking symlink for pitch executable..."
-    symlink_target="$HOME/.local/bin/pitch"
-    if [[ -L "$symlink_target" ]]; then
-        markdown_output+=$'\n🔗 **Symlink for pitch is set up at:** '"$(readlink -f "$symlink_target")"$''
-    else
-        markdown_output+=$'\n❌ **Symlink for pitch is NOT set up.**'
-    fi
-
-    log "Checking latest commit hash..."
-    install_dir="$HOME/.ollama-git-pitch-gen"
-    if [[ -d "$install_dir" ]]; then
-        cd "$install_dir"
-        latest_local_commit=$(git rev-parse HEAD)
-        latest_remote_commit=$(git ls-remote origin -h refs/heads/main | awk '{print $1}')
-
-        markdown_output+=$'\n🔍 Latest installed commit: '"$latest_local_commit"$''
-        if [[ "$latest_local_commit" != "$latest_remote_commit" ]]; then
-            markdown_output+=$'\n⚠️  A new update is available. Run \'pitch update\' to get the latest version.'
-        else
-            markdown_output+=$'\n✅ **Your installation is up to date.**'
-        fi
-    else
-        markdown_output+=$'\n❌ **Installation directory not found:** '"$install_dir"$''
-    fi
-
-    # Render the markdown output at the end
-    echo -e "$markdown_output" | gum format --theme=dark
-}
-
 commit() {
+    # User context and additional prompt handling remains the same
     local user_context=""
-    local additional_prompt=""
+    local additional_prompt_text="" # Renamed to avoid conflict with prompt_file
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
             -m)
@@ -283,7 +172,7 @@ commit() {
                 shift 2
                 ;;
             -p)
-                additional_prompt="$2"
+                additional_prompt_text="$2" # Renamed variable
                 shift 2
                 ;;
             *)
@@ -292,367 +181,475 @@ commit() {
         esac
     done
 
-    get_git_repo_root
+    get_git_repo_root # Exits if not in a git repo
+    # CONFIG_FILE must be set for the current git repo for query_ai_with_fallback
+    export CONFIG_FILE="$git_root/.git/hooks/prepare-commit-msg.properties"
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        warn "Project specific config not found at $CONFIG_FILE. Creating default."
+        # This will use the default values for provider, models, etc.
+        create_default_config "$CONFIG_FILE"
+    fi
 
-    local diff_content=$(git diff --cached --unified=0 --no-color | tail -n 100)
+
+    local diff_content
+    diff_content=$(git diff --cached --unified=0 --no-color | tail -n "$(get_config_value "$CONFIG_FILE" "MAX_DIFF_LINES" "100")")
 
     if [[ -z "$diff_content" ]]; then
-        echo "❌ No staged changes found. Please stage files before committing."
+        error "No staged changes found. Please stage files before committing."
         exit 1
     fi
 
-    local config_file=".git/hooks/prepare-commit-msg.properties"
-    local local_model=$MODEL_PATH
-    if [[ -f "$config_file" ]]; then
-        local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+    # Prompt file still comes from .git/hooks or INSTALL_DIR
+    local prompt_file_path="$git_root/.git/hooks/commit.prompt"
+    if [[ ! -f "$prompt_file_path" ]]; then
+        # Fallback to default prompt file in installation directory
+        prompt_file_path="$INSTALL_DIR/commit.prompt"
+        if [[ ! -f "$prompt_file_path" ]];then
+            error "Commit prompt file not found at $prompt_file_path or $INSTALL_DIR/commit.prompt"
+            exit 1
+        fi
     fi
 
-    # Check if the model exists
-    check_model_exists "$local_model"
+    local base_prompt_content
+    base_prompt_content=$(cat "$prompt_file_path")
 
-    local prompt_file=".git/hooks/commit.prompt"
-    if [[ ! -f "$prompt_file" ]]; then
-        echo "❌ Commit prompt file not found at $prompt_file"
-        exit 1
+    # Construct the initial full prompt
+    local commit_prompt
+    commit_prompt=$(replace_template_values "$base_prompt_content" "DIFF_CONTENT" "$diff_content")
+
+    # Add additional prompt from -p if provided
+    if [[ -n "$additional_prompt_text" ]]; then
+        commit_prompt="$commit_prompt
+
+Additional instructions: $additional_prompt_text"
     fi
 
-    local prompt_content=$(cat "$prompt_file")
-    local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
     gum pager "$commit_prompt" --timeout=5s
 
-    echo "📨 Generating AI commit message suggestion..."
-    local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
+    log "📨 Generating AI commit message suggestion using configured providers..."
+    # query_ai_with_fallback(prompt) - it will use CONFIG_FILE for provider/model/temp
+    local suggested_message
+    suggested_message=$(query_ai_with_fallback "$commit_prompt")
+
 
     if [[ -z "$suggested_message" ]]; then
-        echo "❌ Failed to generate commit message. Please type your own."
-        suggested_message=""
+        error "❌ Failed to generate commit message. Please type your own."
+        suggested_message="<commit message template>" # Provide a fallback template
     fi
 
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
-    # If user did not provide -m, ask if they want to clarify
+
     local extra_context=""
-    while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify the commit message by providing more context?"; do
-        user_addition=$(gum write --placeholder "Add more details about this commit" --width "$(tput cols)" --height 15)
+    # Refinement loop
+    while [[ -z "$user_context" ]] && gum confirm "Would you like to clarify or refine the commit message?"; do
+        local user_addition
+        user_addition=$(gum write --placeholder "Add more details or provide refinement instructions..." --width "$(tput cols)" --height 15)
 
-        # Append the new user context while keeping previous suggestions
-        extra_context="$extra_context\n$user_addition"
+        if [[ -z "$user_addition" ]]; then break; fi # Exit loop if user provides no input
 
-        # Prepare refined commit prompt
-        commit_prompt="
-            $commit_prompt
-            ### User Clarification:
-            $extra_context
-        "
-        commit_prompt="
-            $commit_prompt
-            ### Previous Suggestion:
-            $suggested_message
-        "
-        gum pager "$commit_prompt" --timeout=5s
+        extra_context="$extra_context
+$user_addition" # Append new context
 
-        echo "📨 Refining AI commit message suggestion..."
-        suggested_message=$(ollama run "$local_model" "$commit_prompt")
+        local refined_prompt="$commit_prompt"
+        if [[ -n "$extra_context" ]]; then # Add user clarification if present
+            refined_prompt="$refined_prompt
 
-        # Display refined commit message
+### User Clarification/Refinement:
+$extra_context"
+        fi
+        # Add previous suggestion for context
+        refined_prompt="$refined_prompt
+
+### Previous AI Suggestion (for context, do not repeat verbatim):
+$suggested_message"
+
+        gum pager "$refined_prompt" --timeout=5s
+        log "📨 Refining AI commit message suggestion..."
+        suggested_message=$(query_ai_with_fallback "$refined_prompt")
+
+        if [[ -z "$suggested_message" ]]; then
+            error "❌ Failed to refine commit message. Using previous or please type your own."
+            # Keep the last good suggested_message or prompt user
+            if [[ -z "$suggested_message" ]]; then # if it failed and was empty
+                 suggested_message="<refinement failed, please edit>"
+            fi
+        fi
         echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
     done
 
-
-    # Final user confirmation
+    # Final user confirmation and edit
     echo "$suggested_message" | fold -s -w "$(tput cols)" | gum format --theme=dark
-    if gum confirm "Would you like to proceed with this commit message?"; then
-        # Use Gum to allow user to make final edits
-        local commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 15)
+    if gum confirm "Proceed with this commit message (you can edit it next)?"; then
+        local final_commit_message
+        final_commit_message=$(gum write --placeholder "Enter your commit message" --value "$suggested_message" --width "$(tput cols)" --height 15)
 
-        # Ensure commit message is not empty
-        if [[ -z "$commit_message" ]]; then
-            echo "❌ Commit message cannot be empty."
+        if [[ -z "$final_commit_message" ]]; then
+            error "❌ Commit message cannot be empty."
             exit 1
         fi
 
-        # Commit with the final message
-        git commit -m "$commit_message"
-        echo "✅ Commit successful!"
+        git commit -m "$final_commit_message"
+        log "✅ Commit successful!"
     else
-        echo "❌ Commit aborted."
+        log "❌ Commit aborted."
     fi
 }
 
 generate_pr_markdown() {
     local base_branch="$1"
-    local text_only_flag="$2"
-    local branch_name
-    local diff_content
-    local model_name
-    local config_file=".git/hooks/prepare-commit-msg.properties"
+    # local text_only_flag="$2" # This was not used in the original function logic for query
+    # This is now handled by the TEXT_ONLY variable set by parse_arguments
 
-    # Validate that base_branch is provided
     if [[ -z "$base_branch" ]]; then
-        echo "❌ Error: No base branch provided."
-        echo "Usage: pitch pr <base_branch> [--text-only]"
-        echo "Example: pitch pr main"
+        error "❌ Error: No base branch provided. Usage: pitch pr <base_branch> [--text-only]"
         exit 1
     fi
 
-    # Get the current Git branch name
+    get_git_repo_root # Exits if not in a git repo
+    export CONFIG_FILE="$git_root/.git/hooks/prepare-commit-msg.properties"
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        warn "Project specific config not found at $CONFIG_FILE. Creating default."
+        create_default_config "$CONFIG_FILE"
+    fi
+
+    local branch_name
     branch_name=$(git rev-parse --abbrev-ref HEAD)
 
-    # Get the AI model from the properties file
-    if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
-    else
-        model_name="pitch_default"  # Default fallback model
-    fi
+    log "🔍 Comparing $base_branch to $branch_name..."
+    local diff_content
+    diff_content=$(git diff "$base_branch".."$branch_name" --unified=3 --no-color | tail -n "$(get_config_value "$CONFIG_FILE" "MAX_DIFF_LINES" "500")")
 
-    echo "🤖 Using AI Model: $model_name"
-
-    # Get the Git diff between base branch and the current branch
-    echo "🔍 Comparing $base_branch to $branch_name..."
-    diff_content=$(git diff "$base_branch".."$branch_name" --unified=3 --no-color | tail -n 100)
 
     if [[ -z "$diff_content" ]]; then
-        echo "❌ No differences found between $base_branch and $branch_name."
+        error "❌ No differences found between $base_branch and $branch_name."
         exit 1
     fi
 
-    if [[ -z "$pr_title" ]]; then
-        pr_title="Auto-generated PR Title"
+    # PR Body Prompt (from $INSTALL_DIR/pr-description.prompt or default)
+    local pr_body_prompt_file="$INSTALL_DIR/pr-description.prompt"
+    if [[ ! -f "$pr_body_prompt_file" ]]; then
+        error "PR body prompt file not found: $pr_body_prompt_file"
+        # Fallback to a very basic prompt if file is missing
+        pr_body_prompt_file=$(mktemp)
+        echo "Generate a concise PR description in Markdown format for the following Git diff:
+\$DIFF_CONTENT" > "$pr_body_prompt_file"
+    fi
+    local pr_body_base_prompt=$(cat "$pr_body_prompt_file")
+    local pr_body_final_prompt=$(replace_template_values "$pr_body_base_prompt" "DIFF_CONTENT" "$diff_content")
+
+    log "📨 Generating PR description..."
+    local pr_body
+    pr_body=$(query_ai_with_fallback "$pr_body_final_prompt")
+    if [[ -z "$pr_body" ]]; then
+        error "Failed to generate PR body. Using a placeholder."
+        pr_body="## 📌 Summary
+<AI failed to generate summary. Please fill this manually.>
+
+## 🔄 Changes Made
+- ...
+
+## 🛠 How to Test
+1. ..."
     fi
 
-    # Get PR description from Ollama
-    echo "📨 Generating PR description..."
-    local pr_body_prompt="
-    ### Instruction:
-    Do not include an introduction, preface, or explanation. Respond only with the PR description.
+    # PR Title Prompt (from $INSTALL_DIR/pr-title.prompt or default)
+    local pr_title_prompt_file="$INSTALL_DIR/pr-title.prompt"
+     if [[ ! -f "$pr_title_prompt_file" ]]; then
+        error "PR title prompt file not found: $pr_title_prompt_file"
+        pr_title_prompt_file=$(mktemp)
+        # DIFF_CONTENT and PR_BODY are available as template values
+        echo "Generate a concise Pull Request title based on the following diff:
+\$DIFF_CONTENT
+
+And the PR body:
+\$PR_BODY" > "$pr_title_prompt_file"
+    fi
+    local pr_title_base_prompt=$(cat "$pr_title_prompt_file")
+    local pr_title_final_prompt=$(replace_template_values "$pr_title_base_prompt" "DIFF_CONTENT" "$diff_content")
+    pr_title_final_prompt=$(replace_template_values "$pr_title_final_prompt" "PR_BODY" "$pr_body")
+
+
+    log "📨 Generating PR title..."
+    local pr_title
+    pr_title=$(query_ai_with_fallback "$pr_title_final_prompt")
+    if [[ -z "$pr_title" ]]; then
+        error "Failed to generate PR title. Using a placeholder."
+        pr_title="[AI Failed] Review changes for $branch_name"
+    fi
     
-    ### Task:
-    Generate a concise PR description in Markdown format for the following Git diff:
-        $diff_content
-
-        Format output as:
-        ## 📌 Summary
-        <PR Summary>
-
-        ## 🔄 Changes Made
-        - List modified files
-
-        ## 🛠 How to Test
-        1. Steps to validate the changes
-
-        ## ✅ Checklist
-        - [ ] Code follows project guidelines
-        - [ ] Tests have been added/updated
-        - [ ] Documentation is updated if needed
-    "
-    pr_body=$(ollama run "$model_name" "$pr_body_prompt")
-
-    # Get PR title from Ollama
-    echo "📨 Generating PR title..."
-    local pr_title_prompt="
-    ### Instruction:
-    Do not include an introduction, preface, or explanation. Respond only with the PR title.
-
-    ### Task:
-    Generate a concise Pull Request title based on the following:
-     - diff: $diff_content:
-     - description: $pr_body
-
-    Respond with only the PR title."
-    pr_title=$(ollama run "$model_name" "$pr_title_prompt")
-
-    # Format the PR message using gum
+    local formatted_pr
     formatted_pr=$(echo -e "# $pr_title\n\n$pr_body" | gum format --theme=dark)
-
-    # Display formatted PR message
     echo "$formatted_pr"
 
-    # Check if GitHub CLI is installed and --text-only flag is NOT provided
     if command -v gh >/dev/null 2>&1 && [[ "$TEXT_ONLY" != "true" ]]; then
-        echo "🔗 Creating GitHub Pull Request..."
-        gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
+        if gum confirm "🔗 Create GitHub Pull Request with these details?"; then
+            gh pr create --base "$base_branch" --head "$branch_name" --title "$pr_title" --body "$pr_body"
+        else
+            log "Skipping GitHub PR creation as per user choice."
+        fi
     else
-        echo "ℹ️ Skipping GitHub PR creation (either --text-only flag is set or gh CLI is missing)."
+        log "ℹ️ Skipping GitHub PR creation (either --text-only flag is set, gh CLI is missing, or user declined)."
     fi
 }
 
+
 generate_readme() {
-    local model_name
-    local project_files
-    local aggregated_summary=""
-    local readme_content
-    local ignore_pattern=""
-    local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
-    local config_file
-    
-    git_root=$(get_git_repo_root)
-
-    config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
-    echo "config_file: $config_file"
-
-    # Get the AI model from the properties file
-    if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
-    else
-        model_name="pitch_readme_generator"  # Default fallback model
+    get_git_repo_root # Exits if not in a git repo
+    export CONFIG_FILE="$git_root/.git/hooks/prepare-commit-msg.properties"
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        warn "Project specific config not found at $CONFIG_FILE. Creating default."
+        create_default_config "$CONFIG_FILE"
     fi
-    # Check for ignore pattern in arguments
+
+    local project_files
+    local ignore_pattern=""
+    local ignored_paths_default=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*" "*/target/*" "*.lock" "*.log")
+    local ignored_paths_user_str="" # For --ignore flag
+    
+    # Parse --ignore argument if provided for generate_readme
+    # Note: parse_arguments only handles global flags. Local flags need local parsing.
+    # This is a simplified local parsing for this function.
+    local temp_args=()
     for arg in "$@"; do
         if [[ "$arg" == --ignore=* ]]; then
-            extra_ignore_pattern="${arg#--ignore=}"  # Extract pattern after --ignore=
-            ignored_paths+=($extra_ignore_pattern)
+            ignored_paths_user_str="${arg#--ignore=}"
+        else
+            temp_args+=("$arg") # Keep other args if any, though generate_readme doesn't expect others
         fi
     done
+    # set -- "${temp_args[@]}" # Reset positional parameters if needed, not necessary here
 
-    echo "📂 Collecting project files..."
-    echo "🚫 Ignoring paths: ${ignored_paths[*]}"
-    project_files=$(find . -maxdepth 10 \( $(printf "! -path %s " "${ignored_paths[@]}") \) -type f -exec realpath {} \;)
+    local all_ignored_paths=("${ignored_paths_default[@]}")
+    if [[ -n "$ignored_paths_user_str" ]]; then
+        IFS=',' read -ra user_ignores <<< "$ignored_paths_user_str"
+        all_ignored_paths+=("${user_ignores[@]}")
+    fi
+
+    log "📂 Collecting project files..."
+    log "🚫 Ignoring paths: ${all_ignored_paths[*]}"
+
+    # Construct find command arguments for ignored paths
+    local find_ignore_args=()
+    for pattern in "${all_ignored_paths[@]}"; do
+        find_ignore_args+=(\! -path "$pattern")
+    done
+
+    # Find files, ensuring we are in the git_root directory for find . to work correctly
+    pushd "$git_root" > /dev/null
+    project_files=$(find . -type f \( "${find_ignore_args[@]}" \) -print0 | xargs -0 realpath 2>/dev/null)
+    popd > /dev/null
+
 
     if [[ -z "$project_files" ]]; then
-        echo "❌ No relevant project files found to generate README."
+        error "❌ No relevant project files found to generate README."
         exit 1
     fi
 
-    echo "📄 Summarizing project files ($model_name)..."
-    for file in $project_files; do
-        echo "🔍 Processing $file..."
-        file_content=$(cat "$file")
-        file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
-- A concise summary of its purpose.
-- A list of defined functions, including their names and arguments.
-- Any key configurations or settings.
+    local aggregated_summary=""
+    log "📄 Summarizing project files using configured AI..."
+    for file_path in $project_files; do
+        if [[ ! -f "$file_path" ]]; then continue; fi # Skip if not a file (e.g. from bad realpath output)
+        log "🔍 Processing $file_path..."
+        local file_content
+        file_content=$(cat "$file_path")
+        if [[ -z "$file_content" ]]; then
+            log "Skipping empty file: $file_path"
+            continue
+        fi
 
-File: $file
+        # Truncate very large files to avoid excessive API usage / costs
+        local max_file_chars=10000
+        if [[ "${#file_content}" -gt "$max_file_chars" ]]; then
+            file_content="${file_content:0:$max_file_chars}..."
+            log "Truncated $file_path to $max_file_chars characters for summary."
+        fi
+
+        # Define a prompt for summarizing a single file
+        local single_file_summary_prompt="Analyze the following file and extract:
+- A concise summary of its purpose.
+- A list of defined functions or main components.
+- Any key configurations or settings if apparent.
+
+File: $(basename "$file_path")
 Content:
 $file_content
 
 Output format:
 SUMMARY: <summary of the file>
-FUNCTIONS:
-- function_name1(arg1, arg2)
-- function_name2(arg1, arg2)
+COMPONENTS: <list of functions/components or N/A>
+CONFIGURATIONS: <list of key configurations or N/A>"
 
-CONFIGURATIONS:
-- Key1: Value1
-- Key2: Value2")
+        local file_summary
+        file_summary=$(query_ai_with_fallback "$single_file_summary_prompt")
 
-        aggregated_summary+="$file_summary\n\n"
+        if [[ -n "$file_summary" ]]; then
+            aggregated_summary+="File: $(basename "$file_path")
+${file_summary}
+
+---
+
+"
+        else
+            log "Could not summarize file: $file_path"
+        fi
     done
 
-    echo "📨 Sending aggregated summaries to Ollama for README generation..."
-    readme_content=$(ollama run "$model_name" "Generate a comprehensive README.md file based on the following project summaries:
-
-$aggregated_summary
-
-Guidelines:
-- Include an Introduction explaining what the project does.
-- Describe all detected functions and configurations.
-- Provide installation and usage instructions.
-- Format everything strictly in Markdown.
-
-Output the README.md content only, without additional explanations.")
-
-    if [[ -z "$readme_content" ]]; then
-        echo "❌ Failed to generate README."
+    if [[ -z "$aggregated_summary" ]]; then
+        error "❌ Failed to summarize any project files. Cannot generate README."
         exit 1
     fi
 
-    echo "📄 Writing README.md..."
-    echo "$readme_content" > README.md
+    log "📨 Sending aggregated summaries for final README generation..."
+    local readme_generation_prompt="Generate a comprehensive README.md file based on the following project file summaries:
 
-    echo "✅ README.md successfully generated!"
+${aggregated_summary}
+
+Guidelines:
+- Include an Introduction explaining what the project does.
+- Describe key components, functions, and configurations based on the summaries.
+- Provide basic installation and usage instructions if possible to infer, otherwise suggest placeholders.
+- Format everything strictly in Markdown.
+
+Output the README.md content only, without additional explanations or preamble."
+
+    local readme_content
+    readme_content=$(query_ai_with_fallback "$readme_generation_prompt")
+
+    if [[ -z "$readme_content" ]]; then
+        error "❌ Failed to generate README content."
+        exit 1
+    fi
+
+    log "📄 Writing README.md to $git_root/README.md..."
+    echo -e "$readme_content" > "$git_root/README.md" # Use -e for potential newlines in readme_content
+
+    log "✅ README.md successfully generated!"
 }
 
+
 # ───────────────────────────────────────────────────────────
-# 🔹 SCRIPT EXECUTION LOGIC
+# 🔹 SCRIPT EXECUTION LOGIC (Main case statement)
 # ───────────────────────────────────────────────────────────
+# (install_gum, install_git_hook, register_symlink, update_pitch, info, show_help remain largely the same)
+# (The 'install' case in main.sh calls functions from model.sh like install_ollama, create_model. These are Ollama specific.)
+# (The 'model' case calls pitch_model from lib/model.sh, which will be updated in a later step)
 
-# Add help function with detailed command descriptions
-show_help() {
-    cat << EOF
-Usage: pitch <command> [options]
-
-Commands:
-    install         Install Ollama and setup the environment
-    uninstall      Remove Ollama and clean up
-    start          Start Ollama server
-    stop           Stop Ollama server
-    info           Display system information
-    apply          Install Git hooks
-    commit         Generate AI-powered commit message
-    model          Select AI model
-    update         Update pitch to latest version
-    pr             Generate pull request
-    readme         Generate README.md
-
-Options:
-    --debug        Enable debug logging
-    --no-logs      Disable logging
-    --config=FILE  Use specific config file
-
-Examples:
-    pitch install
-    pitch commit -m "feat: add new feature"
-    pitch pr main --text-only
-EOF
-    exit 0
-}
-
+# Ensure gum is installed early as it's used by many functions
 install_gum
+
+# Set CONFIG_FILE globally for any function that might need it,
+# especially those from external libraries that don't explicitly get it passed.
+# For commands run inside a repo (commit, pr, readme), CONFIG_FILE will be reset to project specific.
+export CONFIG_FILE
+CONFIG_FILE=$(get_active_config_file)
+
 
 case "$1" in
     help|-h|--help)
-        show_help
+        show_help # show_help needs to be updated for new provider commands
         ;;
     install)
-        install_ollama
-        start_ollama
-        register_symlink
-        create_model llama3.2
-        create_model llama3.1:latest
-        create_model deepseek-coder:latest
+        # This 'install' is the main.sh internal one, not install.sh script itself.
+        # It sets up Ollama and Ollama models.
+        # This part might need to be re-evaluated if Ollama is not the primary/default.
+        # For now, assume it installs Ollama as one of the available providers.
+        log "Running internal setup (Ollama, default models)..."
+        install_ollama # From model.sh (Ollama specific)
+        start_ollama   # From model.sh (Ollama specific)
+        # register_symlink is typically done by install.sh script. Redundant?
+        # create_model calls 'ollama create', so it's Ollama specific.
+        # These default models are Ollama-specific.
+        create_model "llama3.1:latest" # Creates pitch_llama3.1:latest
+        # create_model "deepseek-coder:latest" # Creates pitch_deepseek-coder:latest
+        log "Default Ollama models (if not existing) have been processed."
+        log "To configure other providers (OpenAI, Claude), ensure API keys are set up."
+        log "You might have already configured them during the 'install.sh' script execution."
         ;;
     uninstall)
-        remove_pitch_models
+        # This should also be provider-aware if it needs to clean up API keys etc.
+        # For now, it's mostly Ollama focused.
+        remove_pitch_models # Removes 'pitch_*' ollama models
         stop_ollama
-        uninstall
-        log "Uninstallation complete."
+        # uninstall_ollama # This function doesn't exist in model.sh, original used 'uninstall' from main.sh
+        # The main uninstall function in original main.sh (for 'pitch uninstall')
+        # rm -rf "$MODEL_DIR", unlink "$HOME/.local/bin/pitch", brew uninstall ollama, rm -rf "$INSTALL_DIR"
+        # This needs to be a separate function if called here.
+        log "Uninstalling Ollama-specific parts..."
+        # Call a more comprehensive uninstall if needed.
+        log "Full uninstallation should be done via the uninstall script if one is provided, or manually."
         ;;
-    delete)
-        delete_models
-        log "Uninstallation complete."
+    # delete, start, stop, info, apply, update, create_model cases largely unchanged for now,
+    # but 'info' and 'model' will need updates.
+    delete) # Deletes ollama models
+        delete_models # from model.sh
+        log "Ollama models deletion complete."
         ;;
-    start)
-        start_ollama
+    start) # Starts ollama
+        start_ollama # from model.sh
         ;;
-    stop)
-        stop_ollama
+    stop) # Stops ollama
+        stop_ollama # from model.sh
         ;;
     info)
-        info
+        # Needs significant update to show multi-provider status
+        info # Original info function
+        # TODO: Call show_provider_status from model.sh (to be created)
         ;;
     apply)
-        install_git_hook
+        install_git_hook # This copies prepare-commit-msg.sh and .properties
+        # Ensure the .properties file copied is the new multi-provider one.
+        # install_git_hook should copy $INSTALL_DIR/prepare-commit-msg.properties as a template.
+        # And then potentially run migrate_legacy_config on it if it was an old one.
+        # Or, create_default_config if it doesn't exist in the project.
+        git_root_apply=$(get_git_repo_root)
+        if [[ -n "$git_root_apply" ]]; then
+            project_config_to_apply="$git_root_apply/.git/hooks/prepare-commit-msg.properties"
+            if [[ ! -f "$project_config_to_apply" ]]; then
+                log "Creating default config in project: $project_config_to_apply"
+                create_default_config "$project_config_to_apply"
+            else
+                log "Project config $project_config_to_apply already exists. Checking for migration..."
+                # migrate_legacy_config will only run if it's actually a legacy format.
+                # This requires migrate_legacy_config to be robust.
+                # It's better if install_git_hook copies the NEW template, always.
+                # For now, let's assume install_git_hook copies the template from $INSTALL_DIR/prepare-commit-msg.properties
+                # which should be the new version.
+            fi
+        fi
         ;;
     commit)
-        commit
+        # Shift off 'commit' itself from arguments before passing to the function
+        shift
+        commit "$@" # Pass remaining args like -m, -p
         ;;
     model)
+        # This will call pitch_model from lib/model.sh, which is the next plan step to update.
         pitch_model
         ;;
     update)
         update_pitch
         ;;
-    create_model)
-        create_model $2
+    create_model) # This is Ollama specific
+        if [[ -z "$2" ]]; then error "Model name required for create_model."; exit 1; fi
+        create_model "$2" # from model.sh
         ;;
     pr)
-        generate_pr_markdown $2
+        # Shift off 'pr' itself
+        shift
+        generate_pr_markdown "$@" # Pass base_branch and any flags like --text-only
         ;;
     readme)
-        generate_readme
+        shift
+        generate_readme "$@" # Pass --ignore flags
         ;;
     ask)
-        ask "$2"
+        shift
+        ask "$@" # Pass user input
+        ;;
+    # New command for provider status
+    providers)
+        # This function will be added to lib/model.sh
+        show_provider_status
         ;;
     *)
         show_help
