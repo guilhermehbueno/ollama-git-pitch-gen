@@ -1,0 +1,38 @@
+#!/bin/sh
+
+# Check if mods is available
+# Assumes 'mods' is in PATH (e.g., installed via Homebrew)
+if ! command -v mods >/dev/null 2>&1; then
+    echo "mods command not found. Please ensure it's installed (e.g., via 'brew install mods') and in your PATH."
+    echo "Skipping commit message generation."
+    exit 0
+fi
+
+# Get the diff of staged changes
+GIT_DIFF=$(git diff --cached)
+
+if [ -z "$GIT_DIFF" ]; then
+    echo "No staged changes. Skipping commit message generation."
+    exit 0
+fi
+
+# Generate the commit message using mods
+# The -P flag makes mods print the output to stdout
+# The second argument to this script ($2) is the commit message source (e.g., message, template, merge, squash, commit)
+# We only want to run this if it's a new commit message (i.e. not a merge or squash etc)
+if [ "$2" = "message" ] || [ -z "$2" ]; then
+    # Ensure MODS_OPENAI_API_KEY is set, otherwise mods will error or hang
+    if [ -z "$MODS_OPENAI_API_KEY" ]; then
+        echo "MODS_OPENAI_API_KEY is not set. Please set it to use mods for commit messages."
+        echo "Skipping commit message generation."
+        # We exit 0 here because we don't want to block the commit if the API key isn't set.
+        # The user can still write their own message.
+        exit 0
+    fi
+    SUMMARY=$(mods --no-limit -P "Summarize the following git diff in a conventional commit message format: $GIT_DIFF")
+    # Prepend the summary to the commit message file
+    # The commit message file is passed as the first argument ($1) to this script
+    echo "$SUMMARY" > "$1"
+fi
+
+exit 0

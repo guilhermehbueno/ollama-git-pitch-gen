@@ -109,6 +109,38 @@ install_gum() {
     fi
 }
 
+install_mods() {
+    log "Checking mods installation..."
+    if command -v mods >/dev/null 2>&1; then
+        log "✅ mods is already installed."
+        return 0
+    fi
+
+    log "mods not found. Attempting installation..."
+    if command -v brew >/dev/null 2>&1; then
+        log "Attempting to install mods using Homebrew..."
+        if brew install mods; then
+            if command -v mods >/dev/null 2>&1; then
+                log "✅ mods successfully installed via Homebrew."
+                return 0
+            else
+                log "❌ 'brew install mods' reported success, but 'mods' command is still not found. Check your PATH or Brew setup."
+            fi
+        else
+            log "❌ Failed to install mods using Homebrew."
+        fi
+    else
+        log "Homebrew not found. Cannot install mods automatically via Brew."
+    fi
+
+    log "⚠️ mods could not be installed automatically."
+    log "Please install it manually by following the instructions at:"
+    log "https://github.com/charmbracelet/mods#installation"
+    log "(Typically, you can run: 'brew install mods' or 'go install github.com/charmbracelet/mods@latest')"
+    # Decide if this should be a fatal error for the install script. For now, just warn.
+    return 1
+}
+
 install_git_hook() {
     git_root=$(get_git_repo_root)
 
@@ -605,6 +637,7 @@ case "$1" in
         ;;
     install)
         install_ollama
+        install_mods # Added mods installation
         start_ollama
         register_symlink
         create_model llama3.2

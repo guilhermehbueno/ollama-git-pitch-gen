@@ -241,3 +241,5 @@ For most development, it's recommended to use the `install.sh` script to set up 
 ## License
 ---------
 This project is licensed under the MIT License.
+
+A small line added for testing the commit hook.
