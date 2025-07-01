@@ -458,7 +458,12 @@ generate_pr_markdown() {
         - [ ] Tests have been added/updated
         - [ ] Documentation is updated if needed
     "
-    pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    if [[ "$model_name" == "mods" ]]; then
+        pr_body=$(mods --no-limit -P "$pr_body_prompt")
+    else
+        pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    fi
+
 
     # Get PR title from Ollama
     echo "📨 Generating PR title..."
@@ -473,6 +478,12 @@ generate_pr_markdown() {
 
     Respond with only the PR title."
     pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+
+    if [[ "$model_name" == "mods" ]]; then
+        pr_body=$(mods --no-limit -P "$pr_title_prompt")
+    else
+        pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+    fi
 
     # Format the PR message using gum
     formatted_pr=$(echo -e "# $pr_title\n\n$pr_body" | gum format --theme=dark)
