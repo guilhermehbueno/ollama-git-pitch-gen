@@ -86,6 +86,7 @@ pitch_model() {
     
     # Get a list of models
     local models=($(ollama list | grep pitch | awk '{print $1}'))
+    models+=("mods")
     
     if [[ ${#models[@]} -eq 0 ]]; then
         echo "❌ No models found in Ollama. Please add models first."
@@ -203,5 +204,26 @@ install_ollama() {
         exit 1
     else
         error "Unsupported OS. Please install Ollama manually from https://ollama.ai."
+    fi
+}
+
+install_mods() {
+    log "Checking Mods installation..."
+    if command -v mods >/dev/null 2>&1; then
+        log "Mods is already installed."
+        return
+    fi
+
+    log "Installing Mods..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if ! command -v brew >/dev/null 2>&1; then
+            error "Homebrew not found. Please install Homebrew first."
+        fi
+        brew install mods || error "Failed to install Mods."
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        warn "Please install Mods manually from https://github.com/charmbracelet/mods."
+        exit 1
+    else
+        error "Unsupported OS. Please install Ollama manually from https://github.com/charmbracelet/mods."
     fi
 }

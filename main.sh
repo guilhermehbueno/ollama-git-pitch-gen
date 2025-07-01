@@ -1,6 +1,10 @@
 #!/bin/bash
 
-SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
+if [[ -n "$DEV_MODE" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
+fi
 source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/model.sh"
 source "$SCRIPT_DIR/lib/git.sh"
@@ -307,8 +311,14 @@ commit() {
         local_model=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
     fi
 
+
     # Check if the model exists
-    check_model_exists "$local_model"
+    if [[ "$local_model" == "mods" ]]; then
+        echo "✅ Using mods model — skipping existence check."
+    else
+        check_model_exists "$local_model"
+    fi
+
 
     local prompt_file=".git/hooks/commit.prompt"
     if [[ ! -f "$prompt_file" ]]; then
@@ -320,8 +330,12 @@ commit() {
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
     gum pager "$commit_prompt" --timeout=5s
 
-    echo "📨 Generating AI commit message suggestion..."
-    local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
+    echo "🤖 Generating commit message with: $local_model"
+    if [[ "$local_model" == "mods" ]]; then
+        local suggested_message=$(mods --no-limit -P "$commit_prompt. $diff_content Format output as: <commit message>")
+    else
+        local suggested_message=$(ollama run "$local_model" "$commit_prompt. $diff_content Format output as: <commit message>")
+    fi
 
     if [[ -z "$suggested_message" ]]; then
         echo "❌ Failed to generate commit message. Please type your own."
@@ -444,7 +458,12 @@ generate_pr_markdown() {
         - [ ] Tests have been added/updated
         - [ ] Documentation is updated if needed
     "
-    pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    if [[ "$model_name" == "mods" ]]; then
+        pr_body=$(mods --no-limit -P "$pr_body_prompt")
+    else
+        pr_body=$(ollama run "$model_name" "$pr_body_prompt")
+    fi
+
 
     # Get PR title from Ollama
     echo "📨 Generating PR title..."
@@ -458,7 +477,12 @@ generate_pr_markdown() {
      - description: $pr_body
 
     Respond with only the PR title."
-    pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+
+    if [[ "$model_name" == "mods" ]]; then
+        pr_title=$(mods --no-limit -P "$pr_title_prompt")
+    else
+        pr_title=$(ollama run "$model_name" "$pr_title_prompt")
+    fi
 
     # Format the PR message using gum
     formatted_pr=$(echo -e "# $pr_title\n\n$pr_body" | gum format --theme=dark)
@@ -597,14 +621,14 @@ EOF
     exit 0
 }
 
-install_gum
-
 case "$1" in
     help|-h|--help)
         show_help
         ;;
     install)
+        install_gum
         install_ollama
+        install_mods
         start_ollama
         register_symlink
         create_model llama3.2
