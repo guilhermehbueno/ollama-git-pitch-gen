@@ -477,10 +477,9 @@ generate_pr_markdown() {
      - description: $pr_body
 
     Respond with only the PR title."
-    pr_title=$(ollama run "$model_name" "$pr_title_prompt")
 
     if [[ "$model_name" == "mods" ]]; then
-        pr_body=$(mods --no-limit -P "$pr_title_prompt")
+        pr_title=$(mods --no-limit -P "$pr_title_prompt")
     else
         pr_title=$(ollama run "$model_name" "$pr_title_prompt")
     fi
