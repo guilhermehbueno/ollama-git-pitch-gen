@@ -330,7 +330,7 @@ commit() {
     local commit_prompt=$(replace_template_values "$prompt_content" "DIFF_CONTENT" "$diff_content")
     gum pager "$commit_prompt" --timeout=5s
 
-    echo "📨 Generating AI commit message suggestion..."
+    echo "🤖 Generating commit message with: $local_model"
     if [[ "$local_model" == "mods" ]]; then
         local suggested_message=$(mods --no-limit -P "$commit_prompt. $diff_content Format output as: <commit message>")
     else
