@@ -5,22 +5,26 @@ if [[ -n "$DEV_MODE" ]]; then
 else
   SCRIPT_DIR="$HOME/.ollama-git-pitch-gen"
 fi
+
+CONFIG_PATH="$SCRIPT_DIR/lib/config.sh"
+if [[ -f "$CONFIG_PATH" ]]; then
+  # shellcheck source=lib/config.sh
+  source "$CONFIG_PATH"
+else
+  readonly MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+  readonly HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+  readonly MODEL_DIR="$HOME/models"
+  readonly MODEL_PATH="pitch_llama3.1:latest"
+  readonly SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
+  readonly CONFIG_FILE=".git/prepare-commit-msg.properties"
+  readonly INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
+  readonly DISABLE_LOGS="true"
+fi
+
 source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/model.sh"
 source "$SCRIPT_DIR/lib/git.sh"
 source "$SCRIPT_DIR/lib/utils.sh"
-
-# ───────────────────────────────────────────────────────────
-# 🔹 GLOBAL VARIABLES
-# ───────────────────────────────────────────────────────────
-MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Replace with your Hugging Face model name
-HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"  # Model URL
-MODEL_DIR="$HOME/models"  # Directory to store the model
-MODEL_PATH="pitch_llama3.1:latest"  # Model alias for Ollama
-SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
-CONFIG_FILE=".git/prepare-commit-msg.properties"
-INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
-DISABLE_LOGS="true"
 
 parse_arguments "$@"
 
@@ -214,7 +218,6 @@ EOF
 
 update_pitch() {
     echo "🔄 Checking for updates..."
-    INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
     if [[ ! -d "$INSTALL_DIR" ]]; then
         echo "❌ Installation directory not found. Please reinstall using the install script."
         exit 1
