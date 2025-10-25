@@ -11,10 +11,10 @@ if [[ -f "$CONFIG_PATH" ]]; then
   # shellcheck source=lib/config.sh
   source "$CONFIG_PATH"
 else
-  readonly MODEL_NAME="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-  readonly HUGGINGFACE_URL="https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+  readonly MODEL_NAME="llama3.1"
+  readonly HUGGINGFACE_URL="llama3.1"
   readonly MODEL_DIR="$HOME/models"
-  readonly MODEL_PATH="pitch_llama3.1:latest"
+  readonly MODEL_PATH="llama3.1"
   readonly SYSTEM_PROMPT="You are an AI expert in answering questions accurately."
   readonly CONFIG_FILE=".git/prepare-commit-msg.properties"
   readonly INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
@@ -31,15 +31,28 @@ parse_arguments "$@"
 ask() {
     # Use provided argument as user input if available, otherwise prompt
     local user_input="$1"
+    local selected_models_raw
+    local total_width
+    local model_count
+    local box_width
+    local index
+    local response
+    local formatted_response
+    local box
+    local -a selected_models=()
+    local -a responses=()
+    local -a boxes=()
+    local model
+
     if [[ -z "$user_input" ]]; then
         user_input=$(gum input --placeholder "Ask something..." --width "$(tput cols)")
     fi
 
     # Allow user to select models using gum checkbox
-    selected_models=$(ollama list | awk '{print $1}' | tail -n +2 | gum choose --no-limit)
+    selected_models_raw=$(ollama list | awk '{print $1}' | tail -n +2 | gum choose --no-limit)
 
     # Convert selected_models into an array (compatible with older Bash versions)
-    IFS=$'\n' read -rd '' -a selected_models <<< "$selected_models"
+    IFS=$'\n' read -rd '' -a selected_models <<< "$selected_models_raw"
 
     # Validate selection
     if [[ ${#selected_models[@]} -eq 0 ]]; then
@@ -60,9 +73,6 @@ ask() {
     box_width=$(( total_width / model_count - 4 ))  # Adjust width dynamically
 
     # Initialize arrays to store responses and boxes
-    responses=()  # Using indexed array instead of associative array
-    boxes=()
-
     # Query each selected model
     for model in "${selected_models[@]}"; do
         response=$(ollama run "$model" "$user_input")
@@ -556,26 +566,53 @@ generate_readme() {
     local project_files
     local aggregated_summary=""
     local readme_content
-    local ignore_pattern=""
-    local ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*", "*/target/*")
+    local -a ignored_paths=("*/.git/*" "*/node_modules/*" "*/vendor/*" "*/dist/*" "*/build/*" "*/target/*")
     local config_file
+    local git_root
+    local extra_ignore_pattern
+    local file
+    local file_content
+    local file_summary
+    local base_model
+    local prompt
+    local readme_prompt
     
     git_root=$(get_git_repo_root)
 
     config_file="$git_root/.git/hooks/prepare-commit-msg.properties"
-    echo "config_file: $config_file"
 
     # Get the AI model from the properties file
     if [[ -f "$config_file" ]]; then
-        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2)
-    else
-        model_name="pitch_readme_generator"  # Default fallback model
+        model_name=$(grep "^OLLAMA_MODEL=" "$config_file" | cut -d '=' -f2-)
+    fi
+    if [[ -z "$model_name" ]]; then
+        model_name="$MODEL_PATH"
+    fi
+    if [[ "$model_name" != "mods" ]]; then
+        if ! ollama list | awk 'NR>1 {print $1}' | grep -Fxq "$model_name"; then
+            if [[ "$model_name" == pitch_* ]]; then
+                local base_model="${model_name#pitch_}"
+                echo "ℹ️ Model '$model_name' not found locally. Attempting to create it from '$base_model'..."
+                create_model "$base_model"
+            else
+                echo "ℹ️ Model '$model_name' not found locally. Attempting to pull it..."
+                if ! ollama pull "$model_name"; then
+                    echo "❌ Failed to download model '$model_name'."
+                    exit 1
+                fi
+            fi
+
+            if ! ollama list | awk 'NR>1 {print $1}' | grep -Fxq "$model_name"; then
+                echo "❌ Unable to prepare model '$model_name'. Run 'pitch install' to set up required models."
+                exit 1
+            fi
+        fi
     fi
     # Check for ignore pattern in arguments
     for arg in "$@"; do
         if [[ "$arg" == --ignore=* ]]; then
             extra_ignore_pattern="${arg#--ignore=}"  # Extract pattern after --ignore=
-            ignored_paths+=($extra_ignore_pattern)
+            ignored_paths+=("$extra_ignore_pattern")
         fi
     done
 
@@ -590,9 +627,10 @@ generate_readme() {
 
     echo "📄 Summarizing project files ($model_name)..."
     for file in $project_files; do
-        echo "🔍 Processing $file..."
+        echo "🔍 Processing $file... $model_name"
         file_content=$(cat "$file")
-        file_summary=$(ollama run "$model_name" "Analyze the following file and extract:
+        prompt=$(cat <<EOF
+Analyze the following file and extract:
 - A concise summary of its purpose.
 - A list of defined functions, including their names and arguments.
 - Any key configurations or settings.
@@ -609,13 +647,23 @@ FUNCTIONS:
 
 CONFIGURATIONS:
 - Key1: Value1
-- Key2: Value2")
+- Key2: Value2
+EOF
+)
+
+        if [[ "$model_name" == "mods" ]]; then
+            file_summary=$(mods --no-limit -P "$prompt")
+        else
+            file_summary=$(ollama run "$model_name" "$prompt")
+        fi
 
         aggregated_summary+="$file_summary\n\n"
     done
 
     echo "📨 Sending aggregated summaries to Ollama for README generation..."
-    readme_content=$(ollama run "$model_name" "Generate a comprehensive README.md file based on the following project summaries:
+    local readme_prompt
+    readme_prompt=$(cat <<EOF
+Generate a comprehensive README.md file based on the following project summaries:
 
 $aggregated_summary
 
@@ -625,7 +673,15 @@ Guidelines:
 - Provide installation and usage instructions.
 - Format everything strictly in Markdown.
 
-Output the README.md content only, without additional explanations.")
+Output the README.md content only, without additional explanations.
+EOF
+)
+
+    if [[ "$model_name" == "mods" ]]; then
+        readme_content=$(mods --no-limit -P "$readme_prompt")
+    else
+        readme_content=$(ollama run "$model_name" "$readme_prompt")
+    fi
 
     if [[ -z "$readme_content" ]]; then
         echo "❌ Failed to generate README."
