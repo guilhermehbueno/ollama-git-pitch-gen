@@ -163,6 +163,44 @@ register_symlink() {
     fi
 }
 
+link_dev_mode() {
+    local dev_path="$1"
+    local symlink_target="$HOME/.local/bin/pitch"
+
+    if [[ -z "$dev_path" ]]; then
+        echo "❌ Error: Missing required argument."
+        echo "Usage: pitch dev-mode <path-to-local-repo>"
+        return 1
+    fi
+
+    if [[ ! -d "$dev_path" ]]; then
+        echo "❌ Error: '$dev_path' is not a directory."
+        return 1
+    fi
+
+    local script_path="$dev_path/main.sh"
+    if [[ ! -f "$script_path" ]]; then
+        echo "❌ Error: Could not find main.sh at '$script_path'."
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$symlink_target")"
+
+    local abs_script
+    abs_script=$(realpath "$script_path")
+
+    ln -sfn "$abs_script" "$symlink_target"
+    chmod +x "$abs_script"
+
+    cat <<EOF
+✅ Development symlink created:
+   $symlink_target -> $abs_script
+
+Run commands with DEV_MODE=1 to ensure the CLI loads assets from your local checkout, e.g.:
+   DEV_MODE=1 pitch info
+EOF
+}
+
 update_pitch() {
     echo "🔄 Checking for updates..."
     INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
@@ -607,6 +645,7 @@ Commands:
     update         Update pitch to latest version
     pr             Generate pull request
     readme         Generate README.md
+    dev-mode       Point pitch symlink to a local checkout for development
 
 Options:
     --debug        Enable debug logging
@@ -677,6 +716,9 @@ case "$1" in
         ;;
     ask)
         ask "$2"
+        ;;
+    dev-mode)
+        link_dev_mode "$2"
         ;;
     *)
         show_help

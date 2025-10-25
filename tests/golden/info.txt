@@ -1,0 +1,16 @@
+[info] Expectation: command surfaces Ollama version and model list.
+[info] Result:
+
+**🖥️   OS:** <UNAME>
+**💻  Shell:** <SHELL>
+✅ **Ollama installed:** ollama version mock
+❌ **Ollama server is NOT running.**
+📦 **Available Models:**NAME                   ID           SIZE     MODIFIED
+pitch_llama3.1:latest  mock-id      4.5 GB   2024-01-01 00:00:00
+pitch_llama3.2:latest  mock-id2     4.8 GB   2024-01-02 00:00:00
+
+✅ **Git hook installed at:** <REPO_ROOT>/.git/hooks/prepare-commit-msg
+🤖 **Current AI Model:** mods
+🔗 **Symlink for pitch is set up at:** <HOME>/.ollama-git-pitch-gen/main.sh
+🔍 Latest installed commit: <GIT_HASH>
+⚠️  A new update is available. Run 'pitch update' to get the latest version.

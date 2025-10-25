@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+subcmd="${1:-}"
+shift || true
+
+# mods mock primarily used via: mods --no-limit -P "prompt"
+prompt="$*"
+
+if [[ "$prompt" == *"PR description"* ]]; then
+  echo "Mock PR description body. (mods)"
+elif [[ "$prompt" == *"Pull Request title"* ]]; then
+  echo "Mock PR Title (mods)"
+else
+  echo "Mock mods output."
+fi

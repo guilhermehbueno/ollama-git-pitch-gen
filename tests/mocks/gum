@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+shift || true
+
+read_stdin_if_available() {
+  if [[ -p /dev/stdin ]]; then
+    cat
+  fi
+}
+
+pop_from_file_queue() {
+  local file_path="$1"
+  local default="$2"
+
+  if [[ -n "$file_path" && -f "$file_path" ]]; then
+    local first
+    first="$(head -n1 "$file_path")"
+    if [[ -z "$first" ]]; then
+      echo "$default"
+      return
+    fi
+    if [[ $(wc -l < "$file_path") -gt 1 ]]; then
+      tail -n +2 "$file_path" > "${file_path}.tmp"
+      mv "${file_path}.tmp" "$file_path"
+    else
+      # No more entries; truncate file
+      : > "$file_path"
+    fi
+    echo "$first"
+  else
+    echo "$default"
+  fi
+}
+
+case "$cmd" in
+  log)
+    exit 0
+    ;;
+  format|style|pager)
+    if [[ -p /dev/stdin ]]; then
+      cat
+    else
+      printf '%s\n' "$*"
+    fi
+    ;;
+  join)
+    if [[ -p /dev/stdin ]]; then
+      cat
+    else
+      first=true
+      for arg in "$@"; do
+        if $first; then
+          first=false
+        else
+          printf '\n'
+        fi
+        printf '%s' "$arg"
+      done
+      printf '\n'
+    fi
+    ;;
+  table)
+    if [[ -p /dev/stdin ]]; then
+      cat
+    else
+      printf '%s\n' "$*"
+    fi
+    ;;
+  input)
+    if [[ -n "${GUM_INPUT_FILE:-}" && -f "$GUM_INPUT_FILE" ]]; then
+      head -n1 "$GUM_INPUT_FILE"
+    else
+      echo "${GUM_INPUT_VALUE:-stub-input}"
+    fi
+    ;;
+  choose)
+    if [[ -n "${GUM_CHOOSE_FILE:-}" && -f "$GUM_CHOOSE_FILE" ]]; then
+      cat "$GUM_CHOOSE_FILE"
+    elif [[ -n "${GUM_CHOOSE_SELECTION:-}" ]]; then
+      printf '%s\n' "${GUM_CHOOSE_SELECTION}"
+    elif [[ -n "${GUM_CHOOSE_DEFAULT:-}" ]]; then
+      printf '%s\n' "${GUM_CHOOSE_DEFAULT}"
+    else
+      read_stdin_if_available
+    fi
+    ;;
+  confirm)
+    resp="$(pop_from_file_queue "${GUM_CONFIRM_RESP_FILE:-}" "${GUM_CONFIRM_RESP:-yes}")"
+    resp="$(echo "$resp" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$resp" == "yes" || "$resp" == "y" || "$resp" == "true" ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  write)
+    provided_value=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --value)
+          provided_value="$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    if [[ -n "${GUM_WRITE_FILE:-}" && -f "$GUM_WRITE_FILE" ]]; then
+      head -n1 "$GUM_WRITE_FILE"
+    else
+      echo "${GUM_WRITE_VALUE:-$provided_value}"
+    fi
+    ;;
+  *)
+    read_stdin_if_available >/dev/null
+    ;;
+esac

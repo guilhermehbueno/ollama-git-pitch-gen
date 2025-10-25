@@ -1,0 +1,4 @@
+[apply] Expectation: hook files copied into temp repo and executable.
+[apply] Result:
+
+[apply] Verified hook files.

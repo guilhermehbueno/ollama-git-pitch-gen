@@ -1,0 +1,27 @@
+[help] Expectation: command prints usage instructions containing 'Usage: pitch'.
+[help] Result:
+Usage: pitch <command> [options]
+
+Commands:
+    install         Install Ollama and setup the environment
+    uninstall      Remove Ollama and clean up
+    start          Start Ollama server
+    stop           Stop Ollama server
+    info           Display system information
+    apply          Install Git hooks
+    commit         Generate AI-powered commit message
+    model          Select AI model
+    update         Update pitch to latest version
+    pr             Generate pull request
+    readme         Generate README.md
+    dev-mode       Point pitch symlink to a local checkout for development
+
+Options:
+    --debug        Enable debug logging
+    --no-logs      Disable logging
+    --config=FILE  Use specific config file
+
+Examples:
+    pitch install
+    pitch commit -m "feat: add new feature"
+    pitch pr main --text-only

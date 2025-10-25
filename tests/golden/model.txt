@@ -1,0 +1,9 @@
+[model] Expectation: user selection stored in hook properties.
+[model] Result:
+🔧 Creating configuration file: <REPO_ROOT>/tests/tmp/tmp_repo.XXXXXX/.git/hooks/prepare-commit-msg.properties
+📦 Available Models in Ollama:
+✅ Selected model: pitch_llama3.2:latest
+DEBUG: Final updated_lines content:
+OLLAMA_MODEL=pitch_llama3.2:latest
+✅ Updated <REPO_ROOT>/tests/tmp/tmp_repo.XXXXXX/.git/hooks/prepare-commit-msg.properties with OLLAMA_MODEL=pitch_llama3.2:latest
+[model] Verified configuration file.

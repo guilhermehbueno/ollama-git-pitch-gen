@@ -83,6 +83,10 @@ All commands are invoked using the `pitch` executable.
         *   `<base_branch>`: The target branch into which the current branch will be merged (e.g., `main`, `develop`).
     *   **Details:** Compares the changes between the current branch and the specified `<base_branch>`. It then uses the AI model to generate a succinct title and a more detailed description suitable for a pull request. The output is displayed in the terminal for you to copy.
 
+*   **`pitch dev-mode <path>`**
+    *   **Purpose:** Temporarily point the `pitch` executable at a local checkout for development.
+    *   **Details:** Updates the symlink at `~/.local/bin/pitch` to the `main.sh` inside `<path>`. After running it, invoke commands with `DEV_MODE=1` (for example, `DEV_MODE=1 pitch info`) so the CLI sources everything from your working tree. Re-run `pitch dev-mode` with the original installation directory—or simply reinstall—to restore the released version.
+
 *   **`pitch commit`**
     *   **Purpose:** Generates a commit message using AI based on staged Git changes.
     *   **Details:** Analyzes the `git diff --staged` output and uses the configured AI model and prompt to generate a descriptive commit message. How this message is used depends on the Git hook: if `ALLOW_COMMIT_OVERRIDE=true` (the default), the message will populate the commit editor; if `false`, it will be added as a comment.
@@ -184,6 +188,23 @@ For most development, it's recommended to use the `install.sh` script to set up 
     *   Follow the existing shell scripting style (e.g., variable naming, function structure).
     *   Add comments to explain complex logic.
     *   Ensure scripts are executable (`chmod +x <script_name>`).
+
+### Tests
+
+- The lightweight regression suite at `tests/test_basic_commands.sh` exercises the `pitch help`, `pitch info`, `pitch apply`, `pitch model`, `pitch commit`, `pitch ask`, and `pitch pr` flows using a temporary Git repository.
+- Each scenario prints a short "Expectation" description followed by the captured command output, making it easy to visually inspect the results.
+- Each run also normalizes the transcript and compares it against golden files stored in `tests/golden`; refresh them after intentional behavior changes with:
+    ```bash
+    UPDATE_GOLDEN=1 ./tests/test_basic_commands.sh
+    ```
+- During testing the suite exports `DEV_MODE=1` and prepends `tests/mocks` to `PATH`, so calls to `gum`, `ollama`, `mods`, `gh`, `git ls-remote`, `pgrep`, `tput`, and `uname` are satisfied by deterministic stubs in `tests/mocks/`.
+- Normalized copies of every run (and any diffs) are written to `tests/output/`; if a test drifts from its golden, check `<name>.diff` to review the delta and `<name>.actual` for the raw transcript.
+- The harness was designed this way to keep coverage on CLI behavior without depending on real services or network access.
+- Run everything locally from the repo root:
+    ```bash
+    ./tests/test_basic_commands.sh
+    ```
+- Green output signals that the core commands still behave as expected; any failures are summarized at the end of the run.
 
 3.  **Testing:**
     *   Manually test your changes thoroughly.

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
+  shift 2
+  echo "Mock gh pr create invoked with: $*"
+  exit 0
+fi
+
+echo "Mock gh: unsupported command $*" >&2
+exit 1

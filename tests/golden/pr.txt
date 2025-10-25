@@ -1,0 +1,11 @@
+[pr] Expectation: generates PR title/body and skips gh creation in text-only mode.
+[pr] Result:
+🤖 Using AI Model: pitch_default
+🔍 Comparing main to feature/test-pr...
+📨 Generating PR description...
+📨 Generating PR title...
+# Mock PR Title
+
+Mock PR description body.
+ℹ️ Skipping GitHub PR creation (either --text-only flag is set or gh CLI is missing).
+[pr] Verified PR output.
