@@ -57,6 +57,7 @@ text = re.sub(r"\*\*🖥️   OS:\*\*.*", "**🖥️   OS:** <UNAME>", text)
 text = re.sub(r"\*\*💻  Shell:\*\*.*", "**💻  Shell:** <SHELL>", text)
 text = re.sub(r"🔍 Latest installed commit: .*", "🔍 Latest installed commit: <GIT_HASH>", text)
 text = re.sub(r"✅ \*\*Your installation is up to date\.\*\*", "✅ **Your installation is up to date.**", text)
+text = re.sub(r"🔗 \*\*Symlink for pitch is set up at:\*\* .*", "🔗 **Symlink for pitch is set up at:** <SYMLINK_TARGET>", text)
 
 print(text, end="")
 ' "$name" "$REPO_ROOT" "$TEST_DIR" "$TMP_ROOT" "${HOME:-}"
@@ -73,11 +74,20 @@ compare_with_golden() {
   local diff_file="$OUTPUT_DIR/${name}.diff"
   local golden_file="$GOLDEN_DIR/${name}.txt"
 
-  printf '%s' "$log" > "$actual_file"
+  local log_with_newline="$log"
+  if [[ "$log_with_newline" != *$'\n' ]]; then
+    log_with_newline+=$'\n'
+  fi
+
+  printf '%s' "$log_with_newline" > "$actual_file"
 
   local normalized
-  normalized="$(printf '%s' "$log" | normalize_output "$name")"
+  normalized="$(printf '%s' "$log_with_newline" | normalize_output "$name")"
   printf '%s' "$normalized" > "$normalized_file"
+  if [[ "$normalized" != *$'\n' ]]; then
+    echo >> "$normalized_file"
+    normalized+=$'\n'
+  fi
 
   if [[ "${UPDATE_GOLDEN:-}" == "1" ]]; then
     printf '%s' "$normalized" > "$golden_file"
