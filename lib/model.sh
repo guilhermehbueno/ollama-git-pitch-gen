@@ -53,7 +53,7 @@ download_model() {
 }
 
 uninstall() {
-    INSTALL_DIR="$HOME/.ollama-git-pitch-gen"
+    local install_dir="$INSTALL_DIR"
     rm -rf "$MODEL_DIR"
     unlink "$HOME/.local/bin/pitch"
     log "Uninstalling Ollama and cleaning up..."
@@ -64,7 +64,7 @@ uninstall() {
             echo "Homebrew not found. Please uninstall Ollama manually."
         fi
     fi
-    rm -rf "$INSTALL_DIR"
+    rm -rf "$install_dir"
 
 }
 
