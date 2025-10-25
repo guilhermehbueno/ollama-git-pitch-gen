@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Simulate no running process; remain silent for deterministic output.
+exit 1

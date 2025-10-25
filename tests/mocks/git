@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -z "${REAL_GIT:-}" ]]; then
+  echo "REAL_GIT environment variable not set for git mock." >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  ls-remote)
+    # Deterministic remote reference for testing.
+    echo "0123456789abcdef0123456789abcdef01234567	refs/heads/main"
+    exit 0
+    ;;
+esac
+
+exec "$REAL_GIT" "$@"

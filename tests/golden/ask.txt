@@ -1,0 +1,6 @@
+[ask] Expectation: selects both models and prints responses for each.
+[ask] Result:
+--align
+center
+--border double --width 36 --align left --padding 1 2 **🤖 pitch_llama3.1:latest Response:** Mock response from pitch_llama3.1:latest.
+--border double --width 36 --align left --padding 1 2 **🤖 pitch_llama3.2:latest Response:** Mock response from pitch_llama3.2:latest.

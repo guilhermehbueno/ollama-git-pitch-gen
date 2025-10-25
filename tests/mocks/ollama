@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+subcmd="${1:-}"
+
+case "$subcmd" in
+  --version)
+    echo "ollama version mock"
+    ;;
+  list)
+    cat <<'EOF'
+NAME                   ID           SIZE     MODIFIED
+pitch_llama3.1:latest  mock-id      4.5 GB   2024-01-01 00:00:00
+pitch_llama3.2:latest  mock-id2     4.8 GB   2024-01-02 00:00:00
+EOF
+    ;;
+  run)
+    shift || true
+    model="${1:-mock-model}"
+    shift || true
+    prompt="$*"
+
+    if [[ "$prompt" == *"Generate a concise PR description"* ]]; then
+      echo "Mock PR description body."
+    elif [[ "$prompt" == *"Generate a concise Pull Request title"* ]]; then
+      echo "Mock PR Title"
+    else
+      printf 'Mock response from %s.' "$model"
+    fi
+    ;;
+  create|rm|pull)
+    # Act like a success no-op for commands invoked during tests.
+    exit 0
+    ;;
+  *)
+    echo "mock ollama: unsupported command '$subcmd'" >&2
+    exit 0
+    ;;
+esac

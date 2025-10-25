@@ -185,6 +185,23 @@ For most development, it's recommended to use the `install.sh` script to set up 
     *   Add comments to explain complex logic.
     *   Ensure scripts are executable (`chmod +x <script_name>`).
 
+### Tests
+
+- The lightweight regression suite at `tests/test_basic_commands.sh` exercises the `pitch help`, `pitch info`, `pitch apply`, `pitch model`, `pitch commit`, `pitch ask`, and `pitch pr` flows using a temporary Git repository.
+- Each scenario prints a short "Expectation" description followed by the captured command output, making it easy to visually inspect the results.
+- Each run also normalizes the transcript and compares it against golden files stored in `tests/golden`; refresh them after intentional behavior changes with:
+    ```bash
+    UPDATE_GOLDEN=1 ./tests/test_basic_commands.sh
+    ```
+- During testing the suite exports `DEV_MODE=1` and prepends `tests/mocks` to `PATH`, so calls to `gum`, `ollama`, `mods`, `gh`, `git ls-remote`, `pgrep`, `tput`, and `uname` are satisfied by deterministic stubs in `tests/mocks/`.
+- Normalized copies of every run (and any diffs) are written to `tests/output/`; if a test drifts from its golden, check `<name>.diff` to review the delta and `<name>.actual` for the raw transcript.
+- The harness was designed this way to keep coverage on CLI behavior without depending on real services or network access.
+- Run everything locally from the repo root:
+    ```bash
+    ./tests/test_basic_commands.sh
+    ```
+- Green output signals that the core commands still behave as expected; any failures are summarized at the end of the run.
+
 3.  **Testing:**
     *   Manually test your changes thoroughly.
     *   Consider how your changes might affect different commands or configurations.
