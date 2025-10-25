@@ -83,6 +83,10 @@ All commands are invoked using the `pitch` executable.
         *   `<base_branch>`: The target branch into which the current branch will be merged (e.g., `main`, `develop`).
     *   **Details:** Compares the changes between the current branch and the specified `<base_branch>`. It then uses the AI model to generate a succinct title and a more detailed description suitable for a pull request. The output is displayed in the terminal for you to copy.
 
+*   **`pitch dev-mode <path>`**
+    *   **Purpose:** Temporarily point the `pitch` executable at a local checkout for development.
+    *   **Details:** Updates the symlink at `~/.local/bin/pitch` to the `main.sh` inside `<path>`. After running it, invoke commands with `DEV_MODE=1` (for example, `DEV_MODE=1 pitch info`) so the CLI sources everything from your working tree. Re-run `pitch dev-mode` with the original installation directory—or simply reinstall—to restore the released version.
+
 *   **`pitch commit`**
     *   **Purpose:** Generates a commit message using AI based on staged Git changes.
     *   **Details:** Analyzes the `git diff --staged` output and uses the configured AI model and prompt to generate a descriptive commit message. How this message is used depends on the Git hook: if `ALLOW_COMMIT_OVERRIDE=true` (the default), the message will populate the commit editor; if `false`, it will be added as a comment.

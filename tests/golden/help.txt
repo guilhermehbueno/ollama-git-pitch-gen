@@ -14,6 +14,7 @@ Commands:
     update         Update pitch to latest version
     pr             Generate pull request
     readme         Generate README.md
+    dev-mode       Point pitch symlink to a local checkout for development
 
 Options:
     --debug        Enable debug logging
